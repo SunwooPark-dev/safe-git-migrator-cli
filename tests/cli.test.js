@@ -6,7 +6,14 @@ const path = require("node:path");
 const cp = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 
-const { executeMigration, normalizeSource, classifyArtifacts, enforceMitOnly } = require("../src/lib/runner");
+const {
+  executeMigration,
+  normalizeSource,
+  classifyArtifacts,
+  enforceMitOnly,
+  parseWikiBuildRegistry,
+  runCli,
+} = require("../src/lib/runner");
 
 function writeFile(filePath, contents) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -38,6 +45,50 @@ function git(cwd, args) {
   });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout);
+  }
+}
+
+function writeBuildRegistry(rootDir, contents) {
+  writeFile(path.join(rootDir, "docs", "wiki", "Build-Registry.md"), contents);
+}
+
+function cleanWikiRegistry() {
+  return `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+
+## Added wiki scaffolding
+- Recorded at: 2026-04-20T10:00:00.000Z
+- Summary: Bootstrapped the wiki pages and linked the README.
+- Files:
+  - docs/wiki/Home.md
+  - README.md
+- Verification:
+  - npm test
+  - npm run build
+
+## Registered release checklist
+- Recorded at: 2026-04-21T10:00:00.000Z
+- Summary: Added a release checklist for the beta handoff.
+- Files:
+  - docs/wiki/Release-Checklist.md
+- Verification:
+  - node --test
+`;
+}
+
+async function captureConsoleLogs(fn) {
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (...args) => {
+    logs.push(args.join(" "));
+  };
+
+  try {
+    await fn();
+    return logs;
+  } finally {
+    console.log = originalLog;
   }
 }
 
@@ -508,4 +559,342 @@ test("recommend can suggest a skill when the task is clearly a review request", 
   assert.equal(report.command, "recommend");
   assert.equal(report.recommendation.kind, "skill");
   assert.equal(report.recommendation.id, "code-review");
+});
+
+test("parseWikiBuildRegistry extracts entry fields split by level-two headings", () => {
+  const entries = parseWikiBuildRegistry(cleanWikiRegistry());
+
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries[0], {
+    title: "Added wiki scaffolding",
+    recordedAt: "2026-04-20T10:00:00.000Z",
+    summary: "Bootstrapped the wiki pages and linked the README.",
+    files: ["docs/wiki/Home.md", "README.md"],
+    verification: ["npm test", "npm run build"],
+  });
+  assert.deepEqual(entries[1], {
+    title: "Registered release checklist",
+    recordedAt: "2026-04-21T10:00:00.000Z",
+    summary: "Added a release checklist for the beta handoff.",
+    files: ["docs/wiki/Release-Checklist.md"],
+    verification: ["node --test"],
+  });
+});
+
+test("wiki-mint dry-run reports parsed entry counts without writing files", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-dry-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    "dry-run": true,
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.mode, "dry-run");
+  assert.equal(report.status, "ok");
+  assert.equal(report.entryCount, 2);
+  assert.equal(report.scan.blocked, false);
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.doesNotMatch(registry, /Knowledge Mint:/);
+});
+
+test("wiki-mint scan-only scans without generating output", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-scan-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    "scan-only": true,
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.mode, "scan-only");
+  assert.equal(report.status, "ok");
+  assert.equal(report.entryCount, 2);
+  assert.equal(report.outputPath, path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md"));
+  assert.equal(report.created, false);
+  assert.equal(fs.existsSync(report.outputPath), false);
+});
+
+test("wiki-mint dry-run accepts x-thread format without attempting generation", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-dry-x-thread-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "x-thread",
+    "dry-run": true,
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.format, "x-thread");
+  assert.equal(report.mode, "dry-run");
+  assert.equal(report.status, "ok");
+  assert.equal(report.entryCount, 2);
+  assert.equal(report.scan.blocked, false);
+  assert.equal(report.created, false);
+  assert.equal(report.outputPath, null);
+});
+
+test("wiki-mint scan-only accepts substack format without attempting generation", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-scan-substack-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "substack",
+    "scan-only": true,
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.format, "substack");
+  assert.equal(report.mode, "scan-only");
+  assert.equal(report.status, "ok");
+  assert.equal(report.entryCount, 2);
+  assert.equal(report.scan.blocked, false);
+  assert.equal(report.created, false);
+  assert.equal(report.outputPath, null);
+});
+
+test("wiki-mint readme-showcase writes the showcase and auto-registers the mint", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-ok-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.status, "ok");
+  assert.equal(report.created, true);
+  assert.equal(report.outputFileName, "BUILD_SHOWCASE.md");
+  assert.ok(fs.existsSync(report.outputPath));
+
+  const showcase = fs.readFileSync(report.outputPath, "utf8");
+  assert.match(showcase, /# .* Build Showcase/);
+  assert.match(showcase, /> Source: docs\/wiki\/Build-Registry\.md/);
+  assert.match(showcase, /## Statistics/);
+  assert.match(showcase, /Added wiki scaffolding/);
+  assert.match(showcase, /Registered release checklist/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Knowledge Mint: readme-showcase generated/);
+  assert.match(registry, /wiki-mint --format readme-showcase/);
+  assert.match(registry, /docs\/wiki\/BUILD_SHOWCASE\.md|docs\\wiki\\BUILD_SHOWCASE\.md/);
+});
+
+test("wiki-mint only rejects unsupported formats in generate mode", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-generate-x-thread-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  await assert.rejects(
+    executeMigration("wiki-mint", tempDir, {
+      format: "x-thread",
+    }),
+    /Unsupported wiki-mint format: x-thread/
+  );
+
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
+});
+
+test("wiki-mint reruns do not include prior mint-generated registry entries in showcase output or statistics", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-rerun-safe-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const first = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+  assert.equal(first.status, "ok");
+
+  const second = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+  assert.equal(second.status, "ok");
+
+  const showcase = fs.readFileSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md"), "utf8");
+  assert.doesNotMatch(showcase, /Knowledge Mint:/);
+  assert.match(showcase, /- Entries: 2/);
+  assert.match(showcase, /- File references: 3/);
+  assert.match(showcase, /- Verification steps: 3/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  const parsedEntries = parseWikiBuildRegistry(registry);
+  const mintEntries = parsedEntries.filter((entry) => entry.title === "Knowledge Mint: readme-showcase generated");
+  assert.equal(mintEntries.length, 2);
+  assert.deepEqual(
+    mintEntries.map((entry) => entry.summary),
+    [
+      "Generated BUILD_SHOWCASE.md from 2 Build-Registry entries.",
+      "Generated BUILD_SHOWCASE.md from 2 Build-Registry entries.",
+    ]
+  );
+});
+
+test("wiki-mint keeps non-generated Knowledge Mint entries in the showcase", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-keep-manual-knowledge-mint-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+
+## Knowledge Mint: Project Setup & OMX Handoff
+- Recorded at: 2026-04-22T20:09:43.320Z
+- Summary: Designed wiki-mint pipeline and created a Codex handoff spec.
+- Files:
+  - docs/wiki/HANDOFF_TO_CODEX.md
+- Verification:
+  - implementation_plan.md approved by user
+
+## SIH Phase 1
+- Recorded at: 2026-04-22T16:48:09.569Z
+- Summary: Created the initial schema and wiki structure.
+- Files:
+  - supabase/migrations/01_core_schema.sql
+  - docs/wiki/Home.md
+- Verification:
+  - npm test
+`
+  );
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+
+  assert.equal(report.status, "ok");
+
+  const showcase = fs.readFileSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md"), "utf8");
+  assert.match(showcase, /Knowledge Mint: Project Setup & OMX Handoff/);
+  assert.match(showcase, /SIH Phase 1/);
+  assert.match(showcase, /- Entries: 2/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Knowledge Mint: readme-showcase generated/);
+});
+
+test("wiki-mint keeps manual Knowledge Mint entries even when their title ends in generated", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-keep-manual-generated-title-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+
+## Knowledge Mint: release notes generated
+- Recorded at: 2026-04-22T20:09:43.320Z
+- Summary: Manually documented the generated release notes workflow.
+- Files:
+  - docs/wiki/Release-Notes.md
+- Verification:
+  - manual editorial review
+
+## SIH Phase 1
+- Recorded at: 2026-04-22T16:48:09.569Z
+- Summary: Created the initial schema and wiki structure.
+- Files:
+  - supabase/migrations/01_core_schema.sql
+  - docs/wiki/Home.md
+- Verification:
+  - npm test
+`
+  );
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+
+  assert.equal(report.status, "ok");
+
+  const showcase = fs.readFileSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md"), "utf8");
+  assert.match(showcase, /Knowledge Mint: release notes generated/);
+  assert.match(showcase, /SIH Phase 1/);
+  assert.match(showcase, /- Entries: 2/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Knowledge Mint: readme-showcase generated/);
+});
+
+test("wiki-mint warns on zero parsed entries and skips file creation", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-empty-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+`
+  );
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+  });
+
+  assert.equal(report.command, "wiki-mint");
+  assert.equal(report.status, "warn");
+  assert.equal(report.entryCount, 0);
+  assert.equal(report.created, false);
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
+});
+
+test("wiki-mint rejects unsupported generate formats even when the registry has zero entries", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-empty-unsupported-format-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+`
+  );
+
+  await assert.rejects(
+    executeMigration("wiki-mint", tempDir, {
+      format: "x-thread",
+    }),
+    /Unsupported wiki-mint format: x-thread/
+  );
+});
+
+test("wiki-mint blocks sensitive content, reports offending entry, and sets CLI exit code on report-json", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-block-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+
+## Secret-bearing entry
+- Recorded at: 2026-04-21T13:00:00.000Z
+- Summary: Captured token=abc123 during a local test run.
+- Files:
+  - docs/wiki/Home.md
+- Verification:
+  - echoed eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+`
+  );
+
+  const originalExitCode = process.exitCode;
+  process.exitCode = 0;
+
+  try {
+    const logs = await captureConsoleLogs(async () => {
+      await runCli(["wiki-mint", tempDir, "--report-json"]);
+    });
+
+    const output = logs.join("\n");
+    const report = JSON.parse(output);
+
+    assert.equal(process.exitCode, 1);
+    assert.equal(report.command, "wiki-mint");
+    assert.equal(report.status, "blocked");
+    assert.equal(report.created, false);
+    assert.equal(report.scan.blocked, true);
+    assert.equal(report.scan.issues[0].title, "Secret-bearing entry");
+    assert.ok(report.scan.issues[0].matches.includes("token="));
+    assert.ok(report.scan.issues[0].matches.includes("jwt"));
+    assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
+
+    const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+    assert.doesNotMatch(registry, /Knowledge Mint:/);
+  } finally {
+    process.exitCode = originalExitCode ?? 0;
+  }
 });
