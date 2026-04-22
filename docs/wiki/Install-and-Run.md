@@ -21,6 +21,7 @@ node .\src\cli.js apply <source> --targets codex,omx,hermes,antigravity
 node .\src\cli.js verify <run-id>
 node .\src\cli.js rollback <run-id>
 node .\src\cli.js wiki-bootstrap <target-root> --template cli
+node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 ```
 
 ## Notes
@@ -28,3 +29,4 @@ node .\src\cli.js wiki-bootstrap <target-root> --template cli
 - `dry-run` plans and transforms without install.
 - `apply` installs into target roots and records backup manifests.
 - `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
+- `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.

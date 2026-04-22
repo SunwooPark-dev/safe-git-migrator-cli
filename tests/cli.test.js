@@ -210,3 +210,44 @@ test("wiki-bootstrap is idempotent and can create an adapter wiki scaffold", asy
   assert.equal(second.readmeUpdated, false);
   assert.ok(second.skippedFiles.length >= first.createdFiles.length);
 });
+
+test("wiki-register appends a build entry to an existing wiki", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-register-existing-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Project\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "cli",
+  });
+
+  const report = await executeMigration("wiki-register", tempDir, {
+    title: "Add homepage analytics",
+    summary: "Tracked homepage usage and documented the verification flow.",
+    files: "src/index.ts,docs/wiki/Home.md",
+    verification: "npm test; npm run build",
+  });
+
+  assert.equal(report.command, "wiki-register");
+  assert.equal(report.entryTitle, "Add homepage analytics");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md")));
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Add homepage analytics/);
+  assert.match(registry, /Tracked homepage usage/);
+  assert.match(registry, /src\/index\.ts|src\\index\.ts/);
+  assert.match(registry, /npm test/);
+});
+
+test("wiki-register creates a minimal wiki registry if none exists", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-register-bare-"));
+  writeFile(path.join(tempDir, "README.md"), "# Bare Project\n");
+
+  const report = await executeMigration("wiki-register", tempDir, {
+    title: "Initial import",
+    summary: "Imported baseline assets into the project.",
+  });
+
+  assert.equal(report.command, "wiki-register");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Home.md")));
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md")));
+  const home = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Home.md"), "utf8");
+  assert.match(home, /Build Registry/);
+});

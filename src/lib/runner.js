@@ -242,6 +242,105 @@ function executeWikiBootstrap(targetRoot, flags) {
   };
 }
 
+function ensureWikiHomePage(rootDir) {
+  const homePath = path.join(rootDir, "docs", "wiki", "Home.md");
+  const pages = getWikiTemplatePages("generic");
+  writeFileIfAbsent(homePath, pages["Home.md"]);
+  return homePath;
+}
+
+function ensureHomeLink(rootDir, pageName, label) {
+  const homePath = ensureWikiHomePage(rootDir);
+  const marker = `[${label}](${pageName})`;
+  const current = fs.readFileSync(homePath, "utf8");
+  if (current.includes(marker)) {
+    return false;
+  }
+
+  let updated = current;
+  if (current.includes("## Start here")) {
+    updated = current.replace("## Start here", `## Start here\n- ${marker}`);
+  } else {
+    const separator = current.endsWith("\n") ? "\n" : "\n\n";
+    updated = `${current}${separator}## Start here\n- ${marker}\n`;
+  }
+  fs.writeFileSync(homePath, updated, "utf8");
+  return true;
+}
+
+function executeWikiRegister(targetRoot, flags) {
+  const resolvedRoot = path.resolve(targetRoot);
+  ensureDir(resolvedRoot);
+  const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  ensureDir(wikiDir);
+
+  const genericPages = getWikiTemplatePages("generic");
+  const createdFiles = [];
+
+  for (const [pageName, contents] of Object.entries(genericPages)) {
+    const pagePath = path.join(wikiDir, pageName);
+    if (writeFileIfAbsent(pagePath, contents)) {
+      createdFiles.push(path.relative(resolvedRoot, pagePath));
+    }
+  }
+
+  const registryPath = path.join(wikiDir, "Build-Registry.md");
+  if (writeFileIfAbsent(
+    registryPath,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+`
+  )) {
+    createdFiles.push(path.relative(resolvedRoot, registryPath));
+  }
+
+  const title = String(flags.title || "Unnamed change").trim();
+  const summary = String(flags.summary || "No summary provided.").trim();
+  const files = String(flags.files || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const verification = String(flags.verification || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const generatedAt = new Date().toISOString();
+
+  const lines = [];
+  lines.push(`\n## ${title}`);
+  lines.push(`- Recorded at: ${generatedAt}`);
+  lines.push(`- Summary: ${summary}`);
+  if (files.length > 0) {
+    lines.push(`- Files:`);
+    for (const file of files) {
+      lines.push(`  - ${file}`);
+    }
+  }
+  if (verification.length > 0) {
+    lines.push(`- Verification:`);
+    for (const item of verification) {
+      lines.push(`  - ${item}`);
+    }
+  }
+  fs.appendFileSync(registryPath, `${lines.join("\n")}\n`, "utf8");
+
+  const readmeUpdated = ensureReadmeWikiPointer(resolvedRoot);
+  const homeUpdated = ensureHomeLink(resolvedRoot, "Build-Registry.md", "Build Registry");
+
+  return {
+    command: "wiki-register",
+    targetRoot: resolvedRoot,
+    entryTitle: title,
+    registryPath,
+    createdFiles,
+    readmeUpdated,
+    homeUpdated,
+    files,
+    verification,
+  };
+}
+
 function normalizeSource(input) {
   if (!input) {
     throw new Error("A source path or URL is required.");
@@ -809,6 +908,18 @@ function formatHumanReport(report) {
     ].join("\n");
   }
 
+  if (report.command === "wiki-register") {
+    return [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Entry title: ${report.entryTitle}`,
+      `Registry path: ${report.registryPath}`,
+      `Created files: ${report.createdFiles.length}`,
+      `README updated: ${report.readmeUpdated ? "yes" : "no"}`,
+      `Home updated: ${report.homeUpdated ? "yes" : "no"}`,
+    ].join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -846,6 +957,9 @@ async function executeMigration(command, sourceInput, flags) {
 
   if (command === "wiki-bootstrap") {
     return executeWikiBootstrap(sourceInput, flags);
+  }
+  if (command === "wiki-register") {
+    return executeWikiRegister(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -991,6 +1105,7 @@ Usage:
   safe-git-migrator verify <run-id> [--workspace <path>]
   safe-git-migrator rollback <run-id> [--workspace <path>]
   safe-git-migrator wiki-bootstrap <target-root> [--template cli|adapter|generic]
+  safe-git-migrator wiki-register <target-root> --title <title> --summary <summary> [--files a,b] [--verification "cmd1; cmd2"]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -1009,7 +1124,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 
