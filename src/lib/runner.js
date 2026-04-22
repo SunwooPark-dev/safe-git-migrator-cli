@@ -437,6 +437,143 @@ function executeWikiAudit(targetRoot, flags) {
   };
 }
 
+function executeWikiFinalize(targetRoot, flags) {
+  const resolvedRoot = path.resolve(targetRoot);
+  if (!fs.existsSync(resolvedRoot)) {
+    return {
+      command: "wiki-finalize",
+      targetRoot: resolvedRoot,
+      status: "fail",
+      targetExists: false,
+      recommendations: ["Create or point to an existing target root before finalizing wiki state."],
+    };
+  }
+
+  const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  const requestedTemplate = String(flags.template || "generic").toLowerCase();
+  const wikiExistsAlready = fs.existsSync(wikiDir) && fs.readdirSync(wikiDir, { withFileTypes: true }).length > 0;
+  ensureDir(wikiDir);
+
+  const createdFiles = [];
+  if (!wikiExistsAlready) {
+    const starterPages = getWikiTemplatePages(requestedTemplate);
+    for (const [pageName, contents] of Object.entries(starterPages)) {
+      const pagePath = path.join(wikiDir, pageName);
+      if (writeFileIfAbsent(pagePath, contents)) {
+        createdFiles.push(path.relative(resolvedRoot, pagePath));
+      }
+    }
+  }
+
+  const readmeUpdated = ensureReadmeWikiPointer(resolvedRoot);
+
+  const registryPath = path.join(wikiDir, "Build-Registry.md");
+  if (writeFileIfAbsent(
+    registryPath,
+    `# Build Registry
+
+이 페이지는 프로젝트에서 실제로 만들어진 것과 그 검증 내용을 기록하는 canonical registry입니다.
+`
+  )) {
+    createdFiles.push(path.relative(resolvedRoot, registryPath));
+  }
+
+  const checklistPath = path.join(wikiDir, "Release-Checklist.md");
+  const checklistRelativePath = path.relative(resolvedRoot, checklistPath);
+  const checklistExisted = fs.existsSync(checklistPath);
+  const summary = String(flags.summary || "No final summary provided.").trim();
+  const verification = String(flags.verification || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const risks = String(flags.risks || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const manualSteps = String(flags["manual-steps"] || "")
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const consumers = String(flags.consumers || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const { handoffFiles, unknownConsumers } = getExpectedHandoffFiles(consumers);
+  const handoffStatus = handoffFiles.map((pageName) => {
+    const relativePath = path.join("docs", "wiki", pageName);
+    return {
+      relativePath,
+      present: fs.existsSync(path.join(resolvedRoot, relativePath)),
+    };
+  });
+
+  const checklistLines = [
+    "# Release Checklist",
+    "",
+    "## Finalization Summary",
+    summary,
+    "",
+    "## Verification",
+    ...(verification.length > 0 ? verification.map((item) => `- ${item}`) : ["- No verification provided."]),
+    "",
+    "## Remaining Risks",
+    ...(risks.length > 0 ? risks.map((item) => `- ${item}`) : ["- None recorded."]),
+    "",
+    "## Manual Follow-up",
+    ...(manualSteps.length > 0 ? manualSteps.map((item) => `- ${item}`) : ["- None recorded."]),
+    "",
+    "## Consumer Handoff Status",
+    ...(handoffStatus.length > 0
+      ? handoffStatus.map((entry) => `- ${entry.relativePath}: ${entry.present ? "present" : "missing"}`)
+      : ["- No consumer handoff targets specified."]),
+  ];
+  fs.writeFileSync(checklistPath, `${checklistLines.join("\n")}\n`, "utf8");
+  if (!checklistExisted) {
+    createdFiles.push(checklistRelativePath);
+  }
+
+  const homeUpdated = ensureHomeLink(resolvedRoot, "Release-Checklist.md", "Release Checklist");
+  const generatedAt = new Date().toISOString();
+  const registryLines = [
+    `\n## Finalize project state`,
+    `- Recorded at: ${generatedAt}`,
+    `- Summary: ${summary}`,
+  ];
+  if (verification.length > 0) {
+    registryLines.push(`- Verification:`);
+    for (const item of verification) {
+      registryLines.push(`  - ${item}`);
+    }
+  }
+  if (manualSteps.length > 0) {
+    registryLines.push(`- Manual steps:`);
+    for (const item of manualSteps) {
+      registryLines.push(`  - ${item}`);
+    }
+  }
+  if (risks.length > 0) {
+    registryLines.push(`- Remaining risks:`);
+    for (const item of risks) {
+      registryLines.push(`  - ${item}`);
+    }
+  }
+  fs.appendFileSync(registryPath, `${registryLines.join("\n")}\n`, "utf8");
+
+  const status = unknownConsumers.length > 0 ? "warn" : "ok";
+
+  return {
+    command: "wiki-finalize",
+    targetRoot: resolvedRoot,
+    status,
+    createdFiles,
+    readmeUpdated,
+    homeUpdated,
+    checklistPath,
+    registryPath,
+    unknownConsumers,
+  };
+}
+
 function normalizeSource(input) {
   if (!input) {
     throw new Error("A source path or URL is required.");
@@ -1029,6 +1166,18 @@ function formatHumanReport(report) {
     ].join("\n");
   }
 
+  if (report.command === "wiki-finalize") {
+    return [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Status: ${report.status}`,
+      `Created files: ${report.createdFiles.length}`,
+      `README updated: ${report.readmeUpdated ? "yes" : "no"}`,
+      `Home updated: ${report.homeUpdated ? "yes" : "no"}`,
+      `Checklist path: ${report.checklistPath}`,
+    ].join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -1072,6 +1221,9 @@ async function executeMigration(command, sourceInput, flags) {
   }
   if (command === "wiki-audit") {
     return executeWikiAudit(sourceInput, flags);
+  }
+  if (command === "wiki-finalize") {
+    return executeWikiFinalize(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -1219,6 +1371,7 @@ Usage:
   safe-git-migrator wiki-bootstrap <target-root> [--template cli|adapter|generic]
   safe-git-migrator wiki-register <target-root> --title <title> --summary <summary> [--files a,b] [--verification "cmd1; cmd2"]
   safe-git-migrator wiki-audit <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini]
+  safe-git-migrator wiki-finalize <target-root> [--template cli|adapter|generic] [--summary text] [--verification "cmd1; cmd2"] [--risks "r1; r2"] [--manual-steps "s1; s2"]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -1237,7 +1390,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit", "wiki-finalize"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 

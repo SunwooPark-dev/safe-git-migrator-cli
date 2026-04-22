@@ -68,3 +68,20 @@ Example:
 node .\src\cli.js wiki-audit C:\path\to\repo --template cli
 node .\src\cli.js wiki-audit C:\path\to\repo --template adapter --consumers codex,antigravity,gemini
 ```
+
+## wiki-finalize
+Purpose:
+- write or refresh `docs/wiki/Release-Checklist.md`
+- capture final verification, remaining risks, and manual follow-up
+- link the release checklist from the wiki home page
+- append a finalization record into `docs/wiki/Build-Registry.md`
+
+Example:
+```powershell
+node .\src\cli.js wiki-finalize C:\path\to\repo `
+  --template cli `
+  --summary "Internal beta is ready." `
+  --verification "npm test; npm run build" `
+  --risks "No GitHub Wiki sync automation yet." `
+  --manual-steps "Review PR before release."
+```

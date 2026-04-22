@@ -344,3 +344,53 @@ test("wiki-audit fails on unknown consumer values instead of silently ignoring t
   assert.equal(report.status, "fail");
   assert.deepEqual(report.unknownConsumers, ["ag"]);
 });
+
+test("wiki-finalize creates a release checklist and records final verification", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-finalize-cli-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example CLI\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "cli",
+  });
+
+  const report = await executeMigration("wiki-finalize", tempDir, {
+    template: "cli",
+    summary: "CLI is ready for internal beta use.",
+    verification: "npm test; npm run build",
+    risks: "No GitHub Wiki sync automation yet.",
+    "manual-steps": "Review PR before release.",
+    consumers: "codex",
+  });
+
+  assert.equal(report.command, "wiki-finalize");
+  assert.equal(report.status, "ok");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Release-Checklist.md")));
+
+  const checklist = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Release-Checklist.md"), "utf8");
+  assert.match(checklist, /CLI is ready for internal beta use/);
+  assert.match(checklist, /npm test/);
+  assert.match(checklist, /No GitHub Wiki sync automation yet/);
+  assert.match(checklist, /Review PR before release/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Finalize project state/);
+});
+
+test("wiki-finalize respects an existing adapter wiki shape", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-finalize-adapter-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("wiki-finalize", tempDir, {
+    template: "adapter",
+    summary: "Adapter repo handoffs are complete.",
+    consumers: "codex,antigravity,gemini",
+  });
+
+  assert.equal(report.command, "wiki-finalize");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Release-Checklist.md")));
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "Architecture.md")), false);
+});
