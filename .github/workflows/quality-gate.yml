@@ -1,0 +1,39 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  quality-gate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Show tool versions
+        shell: pwsh
+        run: |
+          node -v
+          npm -v
+
+      - name: Run tests
+        shell: pwsh
+        run: npm test
+
+      - name: Run build check
+        shell: pwsh
+        run: npm run build
+
+      - name: Run wiki audit
+        shell: pwsh
+        run: node .\src\cli.js wiki-audit . --template cli --report-json
