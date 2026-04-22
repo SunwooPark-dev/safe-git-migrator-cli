@@ -39,3 +39,13 @@ node .\src\cli.js recommend <target-root> --task \"이제 뭘 해야 하지?\" -
 - `wiki-finalize` is the finish-phase companion command for writing release/handoff-ready wiki state.
 - `wiki-handoff` is the consumer-facing companion command for refreshing Codex / AG / Gemini handoff pages.
 - `recommend` is the task-aware next-best-action helper when you are unsure which command or skill to use next.
+
+## CI
+GitHub Actions runs the current quality gate on:
+- pull requests targeting `main`
+- pushes to `main`
+
+Current checks:
+- `npm test`
+- `npm run build`
+- `node .\src\cli.js wiki-audit . --template cli --report-json`

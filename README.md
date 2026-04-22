@@ -47,6 +47,7 @@ safe-git-migrator recommend <target-root> --task "이제 뭘 해야 하지?" --t
 - `wiki-finalize` writes a release checklist, links it from the wiki, and appends a finalization record to the build registry
 - `wiki-handoff` creates or refreshes consumer-specific handoff pages such as Codex / Antigravity / Gemini
 - `recommend` inspects task text plus repo state and suggests the next best CLI command or skill
+- GitHub Actions now runs a quality gate on `main` pushes and `main` PRs: `npm test`, `npm run build`, and `wiki-audit`
 
 ## Useful flags
 
