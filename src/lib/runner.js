@@ -272,15 +272,18 @@ function executeWikiRegister(targetRoot, flags) {
   const resolvedRoot = path.resolve(targetRoot);
   ensureDir(resolvedRoot);
   const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  const createdFiles = [];
+  const requestedTemplate = String(flags.template || "generic").toLowerCase();
+  const wikiExistsAlready = fs.existsSync(wikiDir) && fs.readdirSync(wikiDir, { withFileTypes: true }).length > 0;
   ensureDir(wikiDir);
 
-  const genericPages = getWikiTemplatePages("generic");
-  const createdFiles = [];
-
-  for (const [pageName, contents] of Object.entries(genericPages)) {
-    const pagePath = path.join(wikiDir, pageName);
-    if (writeFileIfAbsent(pagePath, contents)) {
-      createdFiles.push(path.relative(resolvedRoot, pagePath));
+  if (!wikiExistsAlready) {
+    const starterPages = getWikiTemplatePages(requestedTemplate);
+    for (const [pageName, contents] of Object.entries(starterPages)) {
+      const pagePath = path.join(wikiDir, pageName);
+      if (writeFileIfAbsent(pagePath, contents)) {
+        createdFiles.push(path.relative(resolvedRoot, pagePath));
+      }
     }
   }
 
