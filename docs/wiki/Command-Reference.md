@@ -26,3 +26,29 @@ Purpose:
 ## rollback
 Purpose:
 - restore from install manifest and backups
+
+## wiki-bootstrap
+Purpose:
+- create a starter `docs/wiki/` structure inside a target repository or folder
+- update README with a canonical wiki pointer when needed
+
+Example:
+```powershell
+node .\src\cli.js wiki-bootstrap C:\path\to\repo --template cli
+node .\src\cli.js wiki-bootstrap C:\path\to\repo --template adapter
+```
+
+## wiki-register
+Purpose:
+- append a durable entry into `docs/wiki/Build-Registry.md`
+- capture what was built, what files changed, and how it was verified
+- reduce knowledge leakage after implementation
+
+Example:
+```powershell
+node .\src\cli.js wiki-register C:\path\to\repo `
+  --title "Add homepage analytics" `
+  --summary "Tracked homepage usage and documented the verification flow." `
+  --files "src/index.ts,docs/wiki/Home.md" `
+  --verification "npm test; npm run build"
+```

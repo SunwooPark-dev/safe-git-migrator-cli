@@ -26,6 +26,8 @@ safe-git-migrator dry-run <source> --targets omx,codex,hermes,antigravity
 safe-git-migrator apply <source> --targets omx,codex,hermes,antigravity
 safe-git-migrator verify <run-id>
 safe-git-migrator rollback <run-id>
+safe-git-migrator wiki-bootstrap <target-root> --template cli
+safe-git-migrator wiki-register <target-root> --title "..." --summary "..."
 ```
 
 ## Notes
@@ -34,6 +36,8 @@ safe-git-migrator rollback <run-id>
 - v1 accepts **MIT-licensed sources only**
 - billed or paid API actions are intentionally unsupported
 - official platform conventions are used first when known; otherwise the CLI falls back to conservative local import locations and reports that fact
+- `wiki-bootstrap` creates canonical `docs/wiki/` scaffolds so new projects can satisfy the wiki lifecycle policy early
+- `wiki-register` appends implementation/verification notes into `docs/wiki/Build-Registry.md` so future work is not lost to chat history
 
 ## Useful flags
 
