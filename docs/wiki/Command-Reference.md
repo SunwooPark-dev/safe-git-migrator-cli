@@ -26,3 +26,14 @@ Purpose:
 ## rollback
 Purpose:
 - restore from install manifest and backups
+
+## wiki-bootstrap
+Purpose:
+- create a starter `docs/wiki/` structure inside a target repository or folder
+- update README with a canonical wiki pointer when needed
+
+Example:
+```powershell
+node .\src\cli.js wiki-bootstrap C:\path\to\repo --template cli
+node .\src\cli.js wiki-bootstrap C:\path\to\repo --template adapter
+```

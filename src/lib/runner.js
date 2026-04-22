@@ -89,6 +89,159 @@ function normalizeTargets(rawTargets) {
   return [...new Set(parsed)];
 }
 
+function getWikiTemplatePages(template) {
+  const templates = {
+    cli: {
+      "Home.md": `# Project Wiki
+
+Welcome to the canonical wiki for this CLI project.
+
+## Start here
+- [Install and Run](Install-and-Run.md)
+- [Command Reference](Command-Reference.md)
+- [Architecture](Architecture.md)
+- [Testing and Verification](Testing-and-Verification.md)
+- [Troubleshooting](Troubleshooting.md)
+`,
+      "Install-and-Run.md": `# Install and Run
+
+## Goal
+Explain how to install and run the CLI safely.
+`,
+      "Command-Reference.md": `# Command Reference
+
+Document the supported commands, key flags, and expected outputs here.
+`,
+      "Architecture.md": `# Architecture
+
+Summarize the important code paths, data flow, and design choices here.
+`,
+      "Testing-and-Verification.md": `# Testing and Verification
+
+List the test commands, verification steps, and known gaps here.
+`,
+      "Troubleshooting.md": `# Troubleshooting
+
+Document common failure modes and recovery steps here.
+`,
+    },
+    adapter: {
+      "Home.md": `# Adapter Repository Wiki
+
+This wiki explains how to use and maintain the imported adapter repository.
+
+## Start here
+- [Quick Start](Quick-Start.md)
+- [Adapters](Adapters.md)
+- [Validation System](Validation-System.md)
+- [Prompt Library](Prompt-Library.md)
+- [FAQ](FAQ.md)
+`,
+      "Quick-Start.md": `# Quick Start
+
+Explain the fastest usable path for the target tools here.
+`,
+      "Adapters.md": `# Adapters
+
+Describe the role of each adapter file and target environment here.
+`,
+      "Validation-System.md": `# Validation System
+
+Explain validation docs, result docs, and fixture/update rules here.
+`,
+      "Prompt-Library.md": `# Prompt Library
+
+Collect the copy-paste prompts and scenario entry points here.
+`,
+      "FAQ.md": `# FAQ
+
+Answer the most common questions about what this repository is and how to use it.
+`,
+    },
+    generic: {
+      "Home.md": `# Project Wiki
+
+This is the canonical wiki home page.
+`,
+      "Quick-Start.md": `# Quick Start
+
+Document the fastest way to use this project here.
+`,
+      "Architecture.md": `# Architecture
+
+Document the important structure and design decisions here.
+`,
+    },
+  };
+
+  if (!templates[template]) {
+    throw new Error(`Unsupported wiki template: ${template}`);
+  }
+
+  return templates[template];
+}
+
+function writeFileIfAbsent(filePath, contents) {
+  if (fs.existsSync(filePath)) {
+    return false;
+  }
+  ensureDir(path.dirname(filePath));
+  fs.writeFileSync(filePath, contents, "utf8");
+  return true;
+}
+
+function ensureReadmeWikiPointer(rootDir) {
+  const readmePath = path.join(rootDir, "README.md");
+  const wikiLine = "## Wiki\nSee docs/wiki/Home.md for the canonical project wiki.\n";
+
+  if (!fs.existsSync(readmePath)) {
+    fs.writeFileSync(readmePath, `# Project\n\n${wikiLine}`, "utf8");
+    return true;
+  }
+
+  const current = fs.readFileSync(readmePath, "utf8");
+  if (current.includes("docs/wiki/Home.md")) {
+    return false;
+  }
+
+  const separator = current.endsWith("\n") ? "\n" : "\n\n";
+  fs.writeFileSync(readmePath, `${current}${separator}${wikiLine}`, "utf8");
+  return true;
+}
+
+function executeWikiBootstrap(targetRoot, flags) {
+  const resolvedRoot = path.resolve(targetRoot);
+  ensureDir(resolvedRoot);
+  const template = String(flags.template || "generic").toLowerCase();
+  const pages = getWikiTemplatePages(template);
+  const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  ensureDir(wikiDir);
+
+  const createdFiles = [];
+  const skippedFiles = [];
+
+  for (const [pageName, contents] of Object.entries(pages)) {
+    const pagePath = path.join(wikiDir, pageName);
+    const created = writeFileIfAbsent(pagePath, contents);
+    if (created) {
+      createdFiles.push(path.relative(resolvedRoot, pagePath));
+    } else {
+      skippedFiles.push(path.relative(resolvedRoot, pagePath));
+    }
+  }
+
+  const readmeUpdated = ensureReadmeWikiPointer(resolvedRoot);
+
+  return {
+    command: "wiki-bootstrap",
+    targetRoot: resolvedRoot,
+    template,
+    createdFiles,
+    skippedFiles,
+    readmeUpdated,
+  };
+}
+
 function normalizeSource(input) {
   if (!input) {
     throw new Error("A source path or URL is required.");
@@ -645,6 +798,17 @@ function buildReport({ runId, source, licenseCheck, artifacts, summaries, applyR
 }
 
 function formatHumanReport(report) {
+  if (report.command === "wiki-bootstrap") {
+    return [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Template: ${report.template}`,
+      `Created files: ${report.createdFiles.length}`,
+      `Skipped files: ${report.skippedFiles.length}`,
+      `README updated: ${report.readmeUpdated ? "yes" : "no"}`,
+    ].join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -678,6 +842,10 @@ function formatHumanReport(report) {
 async function executeMigration(command, sourceInput, flags) {
   if (!isWindows()) {
     throw new Error("v1 is Windows only.");
+  }
+
+  if (command === "wiki-bootstrap") {
+    return executeWikiBootstrap(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -822,6 +990,7 @@ Usage:
   safe-git-migrator apply <source> [--workspace <path>] [--targets <list>] [--no-install]
   safe-git-migrator verify <run-id> [--workspace <path>]
   safe-git-migrator rollback <run-id> [--workspace <path>]
+  safe-git-migrator wiki-bootstrap <target-root> [--template cli|adapter|generic]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -840,7 +1009,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 

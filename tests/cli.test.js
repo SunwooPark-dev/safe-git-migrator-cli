@@ -171,3 +171,42 @@ test("git sources use cached fetch and pick up upstream changes", async () => {
 
   assert.ok(second.inventory.totalArtifacts > first.inventory.totalArtifacts);
 });
+
+test("wiki-bootstrap creates a CLI wiki scaffold and updates README", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-wiki-cli-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example CLI\n");
+
+  const report = await executeMigration("wiki-bootstrap", tempDir, {
+    template: "cli",
+  });
+
+  assert.equal(report.command, "wiki-bootstrap");
+  assert.equal(report.template, "cli");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Home.md")));
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Install-and-Run.md")));
+  assert.ok(report.createdFiles.some((file) => file.endsWith(path.join("docs", "wiki", "Home.md"))));
+
+  const readme = fs.readFileSync(path.join(tempDir, "README.md"), "utf8");
+  assert.match(readme, /docs\/wiki\/Home\.md/);
+  assert.equal(report.readmeUpdated, true);
+});
+
+test("wiki-bootstrap is idempotent and can create an adapter wiki scaffold", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-wiki-adapter-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  const first = await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Quick-Start.md")));
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Validation-System.md")));
+  assert.equal(first.readmeUpdated, true);
+
+  const second = await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  assert.equal(second.readmeUpdated, false);
+  assert.ok(second.skippedFiles.length >= first.createdFiles.length);
+});

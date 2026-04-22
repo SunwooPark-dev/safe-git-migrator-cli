@@ -20,9 +20,11 @@ node .\src\cli.js dry-run <source> --targets codex,omx
 node .\src\cli.js apply <source> --targets codex,omx,hermes,antigravity
 node .\src\cli.js verify <run-id>
 node .\src\cli.js rollback <run-id>
+node .\src\cli.js wiki-bootstrap <target-root> --template cli
 ```
 
 ## Notes
 - `inspect` is read-only and records inventory/license state.
 - `dry-run` plans and transforms without install.
 - `apply` installs into target roots and records backup manifests.
+- `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
