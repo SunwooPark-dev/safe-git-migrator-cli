@@ -60,6 +60,8 @@ Purpose:
 - check README wiki pointer presence
 - check whether `Build-Registry.md` exists
 - optionally check missing consumer handoff pages
+- stay read-only; do not create missing target roots during audit
+- fail on unknown consumer values instead of silently ignoring them
 
 Example:
 ```powershell

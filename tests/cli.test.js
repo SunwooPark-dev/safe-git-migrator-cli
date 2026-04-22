@@ -294,3 +294,35 @@ test("wiki-audit fails when required consumer handoffs are missing", async () =>
   assert.ok(report.missingHandoffs.some((file) => file.endsWith("HANDOFF_TO_ANTIGRAVITY_APP.md")));
   assert.ok(report.missingHandoffs.some((file) => file.endsWith("HANDOFF_TO_GEMINI_TERMINAL.md")));
 });
+
+test("wiki-audit does not create a missing target root", async () => {
+  const missingRoot = path.join(os.tmpdir(), `sgm-audit-missing-${Date.now()}`);
+  fs.rmSync(missingRoot, { recursive: true, force: true });
+
+  const report = await executeMigration("wiki-audit", missingRoot, {
+    template: "cli",
+  });
+
+  assert.equal(report.command, "wiki-audit");
+  assert.equal(report.status, "fail");
+  assert.equal(report.targetExists, false);
+  assert.equal(fs.existsSync(missingRoot), false);
+});
+
+test("wiki-audit fails on unknown consumer values instead of silently ignoring them", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-audit-consumers-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("wiki-audit", tempDir, {
+    template: "adapter",
+    consumers: "codex,ag",
+  });
+
+  assert.equal(report.command, "wiki-audit");
+  assert.equal(report.status, "fail");
+  assert.deepEqual(report.unknownConsumers, ["ag"]);
+});

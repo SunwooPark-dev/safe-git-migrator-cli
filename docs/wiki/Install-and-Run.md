@@ -32,3 +32,4 @@ node .\src\cli.js wiki-audit <target-root> --template cli
 - `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
 - `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.
 - `wiki-audit` checks for wiki gaps before handoff or release.
+- `wiki-audit` is read-only and should be safe to run before release or cross-tool onboarding.
