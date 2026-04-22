@@ -363,6 +363,276 @@ function getExpectedHandoffFiles(consumers) {
   };
 }
 
+function getHandoffDescriptor(consumer) {
+  const mapping = {
+    codex: {
+      fileName: "HANDOFF_TO_CODEX_APP.md",
+      label: "Handoff to Codex App",
+      audienceName: "Codex App",
+    },
+    antigravity: {
+      fileName: "HANDOFF_TO_ANTIGRAVITY_APP.md",
+      label: "Handoff to Antigravity App",
+      audienceName: "Antigravity App",
+    },
+    gemini: {
+      fileName: "HANDOFF_TO_GEMINI_TERMINAL.md",
+      label: "Handoff to Gemini Terminal",
+      audienceName: "Gemini terminal workflow",
+    },
+  };
+
+  return mapping[consumer] || null;
+}
+
+function detectGitMetadata(rootDir) {
+  if (!fs.existsSync(path.join(rootDir, ".git"))) {
+    return {
+      repoUrl: null,
+      branch: null,
+    };
+  }
+
+  const readGit = (args) => {
+    const result = cp.spawnSync("git", args, {
+      cwd: rootDir,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    if (result.status !== 0) {
+      return null;
+    }
+    return (result.stdout || "").trim() || null;
+  };
+
+  return {
+    repoUrl: readGit(["config", "--get", "remote.origin.url"]),
+    branch: readGit(["branch", "--show-current"]),
+  };
+}
+
+function getDefaultReadOrder(template, consumer, rootDir) {
+  const candidatesByTemplate = {
+    cli: [
+      path.join("docs", "wiki", "Home.md"),
+      path.join("docs", "wiki", "Install-and-Run.md"),
+      path.join("docs", "wiki", "Command-Reference.md"),
+      "README.md",
+    ],
+    adapter: [
+      path.join("docs", "wiki", "Home.md"),
+      path.join("docs", "wiki", "Quick-Start.md"),
+      consumer === "codex" ? path.join("adapters", "codex", "AGENTS.md") : null,
+      consumer === "antigravity" ? path.join("adapters", "antigravity", "ANTIGRAVITY_PROMPT.md") : null,
+      consumer === "gemini" ? path.join("adapters", "gemini", "GEMINI_PROMPT.md") : null,
+      path.join("docs", "migration", "FINAL_PROMPTS.md"),
+      path.join("docs", "wiki", "Validation-System.md"),
+    ],
+    generic: [
+      path.join("docs", "wiki", "Home.md"),
+      "README.md",
+    ],
+  };
+
+  return (candidatesByTemplate[template] || candidatesByTemplate.generic)
+    .filter(Boolean)
+    .filter((relativePath) => fs.existsSync(path.join(rootDir, relativePath)));
+}
+
+function getHandoffRules(consumer) {
+  if (consumer === "codex") {
+    return {
+      purpose: "implementation-oriented adapter and validation asset repository",
+      rules: [
+        "Use minimal diffs and verification-first execution.",
+        "Avoid unrelated broad refactors.",
+        "Record meaningful outcomes in wiki or migration result docs.",
+      ],
+    };
+  }
+
+  if (consumer === "antigravity") {
+    return {
+      purpose: "conversation-start prompt and validation asset repository",
+      rules: [
+        "State assumptions explicitly before proposing direction.",
+        "Prefer small, controlled changes.",
+        "If the task is ambiguous, offer interpretation options first.",
+      ],
+    };
+  }
+
+  return {
+    purpose: "terminal-first prompt and validation asset repository",
+    rules: [
+      "Keep instructions short and execution-oriented.",
+      "Do not guess.",
+      "Respect existing structure and state verification after changes.",
+    ],
+  };
+}
+
+function buildHandoffContent({ descriptor, consumer, template, targetRoot, repoUrl, branch, readOrder }) {
+  const rules = getHandoffRules(consumer);
+  const localPath = targetRoot;
+  const remoteLine = repoUrl ? `\`${repoUrl}\`` : "`(set repo URL later if needed)`";
+  const branchLine = branch ? `\`${branch}\`` : "`main`";
+  const readOrderLines =
+    readOrder.length > 0
+      ? readOrder.map((relativePath, index) => `${index + 1}. \`${relativePath}\``).join("\n")
+      : "1. `docs/wiki/Home.md`";
+  const repoTypeLine =
+    template === "adapter"
+      ? "adapter and validation repository"
+      : template === "cli"
+        ? "CLI project with canonical wiki docs"
+        : "project repository with canonical wiki docs";
+
+  return `# ${descriptor.label}
+
+이 문서는 **${descriptor.audienceName}가 이 저장소를 바로 사용할 수 있도록 넘길 때** 쓰는 handoff 문서입니다.
+
+---
+
+## 저장소 접근 위치
+
+### 로컬 경로
+\`${localPath}\`
+
+### GitHub
+${remoteLine}
+
+### 기본 브랜치
+${branchLine}
+
+---
+
+## 이 저장소가 하는 일
+
+이 저장소는 ${repoTypeLine}입니다.
+
+${descriptor.audienceName}는 이 저장소를 **${rules.purpose}** 로 사용해야 합니다.
+
+---
+
+## 먼저 읽어야 할 파일
+
+${readOrderLines}
+
+---
+
+## 작업 규칙
+
+${rules.rules.map((rule) => `- ${rule}`).join("\n")}
+
+---
+
+## 권장 브랜치 전략
+
+- \`${branch || "main"}\`에서 새 브랜치를 만들어 작업
+- 의미 있는 결과가 있으면 wiki와 result docs를 같이 업데이트
+
+---
+
+## 사용 후 업데이트 규칙
+
+이 저장소를 사용해서 의미 있는 작업을 했다면 최소한 아래 중 하나는 업데이트해야 합니다.
+
+- \`docs/wiki/Build-Registry.md\`
+- 관련 validation / results 문서
+- 관련 handoff / quick-start 문서
+
+즉, **사용만 하고 기록을 남기지 않는 방식은 금지**입니다.
+`;
+}
+
+function executeWikiHandoff(targetRoot, flags) {
+  const resolvedRoot = path.resolve(targetRoot);
+  ensureDir(resolvedRoot);
+
+  const template = String(flags.template || "generic").toLowerCase();
+  const consumers = String(flags.consumers || flags.consumer || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+
+  const { handoffFiles, unknownConsumers } = getExpectedHandoffFiles(consumers);
+  if (unknownConsumers.length > 0) {
+    return {
+      command: "wiki-handoff",
+      targetRoot: resolvedRoot,
+      template,
+      status: "fail",
+      unknownConsumers,
+      createdFiles: [],
+      skippedFiles: [],
+      recommendations: [`Fix unknown consumer values: ${unknownConsumers.join(", ")}.`],
+    };
+  }
+
+  const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  const createdFiles = [];
+  const skippedFiles = [];
+  const wikiExistsAlready = fs.existsSync(wikiDir) && fs.readdirSync(wikiDir, { withFileTypes: true }).length > 0;
+  ensureDir(wikiDir);
+
+  if (!wikiExistsAlready) {
+    const starterPages = getWikiTemplatePages(template);
+    for (const [pageName, contents] of Object.entries(starterPages)) {
+      const pagePath = path.join(wikiDir, pageName);
+      if (writeFileIfAbsent(pagePath, contents)) {
+        createdFiles.push(path.relative(resolvedRoot, pagePath));
+      }
+    }
+  }
+
+  const gitMeta = detectGitMetadata(resolvedRoot);
+  const repoUrl = String(flags["repo-url"] || gitMeta.repoUrl || "").trim() || null;
+  const branch = String(flags.branch || gitMeta.branch || "main").trim();
+
+  for (const consumer of consumers) {
+    const descriptor = getHandoffDescriptor(consumer);
+    if (!descriptor) {
+      continue;
+    }
+    const handoffPath = path.join(wikiDir, descriptor.fileName);
+    const content = buildHandoffContent({
+      descriptor,
+      consumer,
+      template,
+      targetRoot: resolvedRoot,
+      repoUrl,
+      branch,
+      readOrder: getDefaultReadOrder(template, consumer, resolvedRoot),
+    });
+
+    if (fs.existsSync(handoffPath)) {
+      fs.writeFileSync(handoffPath, content, "utf8");
+      skippedFiles.push(path.relative(resolvedRoot, handoffPath));
+    } else {
+      fs.writeFileSync(handoffPath, content, "utf8");
+      createdFiles.push(path.relative(resolvedRoot, handoffPath));
+    }
+
+    ensureHomeLink(resolvedRoot, descriptor.fileName, descriptor.label);
+  }
+
+  const readmeUpdated = ensureReadmeWikiPointer(resolvedRoot);
+
+  return {
+    command: "wiki-handoff",
+    targetRoot: resolvedRoot,
+    template,
+    status: "ok",
+    repoUrl,
+    branch,
+    createdFiles,
+    skippedFiles,
+    unknownConsumers,
+    readmeUpdated,
+  };
+}
+
 function executeWikiAudit(targetRoot, flags) {
   const resolvedRoot = path.resolve(targetRoot);
   const targetExists = fs.existsSync(resolvedRoot);
@@ -1178,6 +1448,18 @@ function formatHumanReport(report) {
     ].join("\n");
   }
 
+  if (report.command === "wiki-handoff") {
+    return [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Template: ${report.template}`,
+      `Status: ${report.status}`,
+      `Created files: ${report.createdFiles.length}`,
+      `Updated files: ${report.skippedFiles.length}`,
+      `README updated: ${report.readmeUpdated ? "yes" : "no"}`,
+    ].join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -1224,6 +1506,9 @@ async function executeMigration(command, sourceInput, flags) {
   }
   if (command === "wiki-finalize") {
     return executeWikiFinalize(sourceInput, flags);
+  }
+  if (command === "wiki-handoff") {
+    return executeWikiHandoff(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -1372,6 +1657,7 @@ Usage:
   safe-git-migrator wiki-register <target-root> --title <title> --summary <summary> [--files a,b] [--verification "cmd1; cmd2"]
   safe-git-migrator wiki-audit <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini]
   safe-git-migrator wiki-finalize <target-root> [--template cli|adapter|generic] [--summary text] [--verification "cmd1; cmd2"] [--risks "r1; r2"] [--manual-steps "s1; s2"]
+  safe-git-migrator wiki-handoff <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini] [--repo-url <url>] [--branch <branch>]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -1390,7 +1676,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit", "wiki-finalize"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit", "wiki-finalize", "wiki-handoff"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 

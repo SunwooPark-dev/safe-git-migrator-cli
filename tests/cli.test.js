@@ -394,3 +394,48 @@ test("wiki-finalize respects an existing adapter wiki shape", async () => {
   assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "Release-Checklist.md")));
   assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "Architecture.md")), false);
 });
+
+test("wiki-handoff creates consumer handoff pages and links them from home", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-handoff-adapter-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("wiki-handoff", tempDir, {
+    template: "adapter",
+    consumers: "codex,antigravity",
+    "repo-url": "https://github.com/example/repo",
+    branch: "main",
+  });
+
+  assert.equal(report.command, "wiki-handoff");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "HANDOFF_TO_CODEX_APP.md")));
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "HANDOFF_TO_ANTIGRAVITY_APP.md")));
+
+  const home = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Home.md"), "utf8");
+  assert.match(home, /Handoff to Codex App/);
+  assert.match(home, /Handoff to Antigravity App/);
+});
+
+test("wiki-handoff can bootstrap a bare cli repo and fails on unknown consumer names", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-handoff-cli-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example CLI\n");
+
+  const okReport = await executeMigration("wiki-handoff", tempDir, {
+    template: "cli",
+    consumers: "gemini",
+  });
+
+  assert.equal(okReport.command, "wiki-handoff");
+  assert.ok(fs.existsSync(path.join(tempDir, "docs", "wiki", "HANDOFF_TO_GEMINI_TERMINAL.md")));
+
+  const badReport = await executeMigration("wiki-handoff", tempDir, {
+    template: "cli",
+    consumers: "ag",
+  });
+
+  assert.equal(badReport.status, "fail");
+  assert.deepEqual(badReport.unknownConsumers, ["ag"]);
+});

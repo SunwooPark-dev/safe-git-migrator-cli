@@ -85,3 +85,14 @@ node .\src\cli.js wiki-finalize C:\path\to\repo `
   --risks "No GitHub Wiki sync automation yet." `
   --manual-steps "Review PR before release."
 ```
+
+## wiki-handoff
+Purpose:
+- create or refresh consumer-specific handoff pages
+- support Codex App, Antigravity App, and Gemini terminal workflow
+- link handoff pages from the wiki home page
+
+Example:
+```powershell
+node .\src\cli.js wiki-handoff C:\path\to\repo --template adapter --consumers codex,antigravity,gemini
+```
