@@ -9,6 +9,7 @@ This CLI is a Windows-first npm tool for safely ingesting MIT-licensed GitHub or
 - Antigravity
 
 ## Start here
+- [Build Registry](Build-Registry.md)
 - [GitHub Wiki Mirroring](GitHub-Wiki-Mirroring.md)
 - [Install and Run](Install-and-Run.md)
 - [Command Reference](Command-Reference.md)
