@@ -439,3 +439,73 @@ test("wiki-handoff can bootstrap a bare cli repo and fails on unknown consumer n
   assert.equal(badReport.status, "fail");
   assert.deepEqual(badReport.unknownConsumers, ["ag"]);
 });
+
+test("recommend suggests wiki-bootstrap for a new project start", async () => {
+  const missingRoot = path.join(os.tmpdir(), `sgm-recommend-new-${Date.now()}`);
+  fs.rmSync(missingRoot, { recursive: true, force: true });
+
+  const report = await executeMigration("recommend", missingRoot, {
+    task: "새 프로젝트 시작할게. 위키부터 잡고 싶어.",
+    template: "cli",
+  });
+
+  assert.equal(report.command, "recommend");
+  assert.equal(report.recommendation.kind, "cli");
+  assert.equal(report.recommendation.id, "wiki-bootstrap");
+});
+
+test("recommend suggests wiki-register after meaningful implementation when registry is missing", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-recommend-register-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("recommend", tempDir, {
+    task: "기능 구현이 끝났어. 이제 무엇을 해야 하지?",
+    template: "adapter",
+  });
+
+  assert.equal(report.command, "recommend");
+  assert.equal(report.recommendation.kind, "cli");
+  assert.equal(report.recommendation.id, "wiki-register");
+});
+
+test("recommend suggests wiki-handoff when consumer handoffs are missing", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-recommend-handoff-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+  await executeMigration("wiki-register", tempDir, {
+    template: "adapter",
+    title: "Initial import",
+    summary: "Imported baseline assets.",
+  });
+
+  const report = await executeMigration("recommend", tempDir, {
+    task: "이제 Codex랑 Gemini에 넘겨야 해.",
+    template: "adapter",
+    consumers: "codex,gemini",
+  });
+
+  assert.equal(report.command, "recommend");
+  assert.equal(report.recommendation.kind, "cli");
+  assert.equal(report.recommendation.id, "wiki-handoff");
+});
+
+test("recommend can suggest a skill when the task is clearly a review request", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-recommend-skill-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Repo\n");
+
+  const report = await executeMigration("recommend", tempDir, {
+    task: "코드 리뷰해줘. 머지 전에 점검하고 싶어.",
+    template: "cli",
+  });
+
+  assert.equal(report.command, "recommend");
+  assert.equal(report.recommendation.kind, "skill");
+  assert.equal(report.recommendation.id, "code-review");
+});

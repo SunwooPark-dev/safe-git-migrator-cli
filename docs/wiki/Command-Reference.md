@@ -96,3 +96,15 @@ Example:
 ```powershell
 node .\src\cli.js wiki-handoff C:\path\to\repo --template adapter --consumers codex,antigravity,gemini
 ```
+
+## recommend
+Purpose:
+- inspect a repo's wiki state and the current task text
+- recommend the next best CLI command or high-level skill
+- reduce decision overload when too many commands and skills exist
+
+Example:
+```powershell
+node .\src\cli.js recommend C:\path\to\repo --task "기능 구현이 끝났어. 이제 무엇을 해야 하지?" --template adapter
+node .\src\cli.js recommend C:\path\to\repo --task "코드 리뷰해줘" --template cli
+```

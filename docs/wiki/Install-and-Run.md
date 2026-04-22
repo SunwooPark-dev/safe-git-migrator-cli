@@ -25,6 +25,7 @@ node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 node .\src\cli.js wiki-audit <target-root> --template cli
 node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
 node .\src\cli.js wiki-handoff <target-root> --template adapter --consumers codex,antigravity,gemini
+node .\src\cli.js recommend <target-root> --task \"이제 뭘 해야 하지?\" --template adapter
 ```
 
 ## Notes
@@ -37,3 +38,4 @@ node .\src\cli.js wiki-handoff <target-root> --template adapter --consumers code
 - `wiki-audit` is read-only and should be safe to run before release or cross-tool onboarding.
 - `wiki-finalize` is the finish-phase companion command for writing release/handoff-ready wiki state.
 - `wiki-handoff` is the consumer-facing companion command for refreshing Codex / AG / Gemini handoff pages.
+- `recommend` is the task-aware next-best-action helper when you are unsure which command or skill to use next.

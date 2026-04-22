@@ -633,7 +633,7 @@ function executeWikiHandoff(targetRoot, flags) {
   };
 }
 
-function executeWikiAudit(targetRoot, flags) {
+function inspectWikiState(targetRoot, flags) {
   const resolvedRoot = path.resolve(targetRoot);
   const targetExists = fs.existsSync(resolvedRoot);
   const template = String(flags.template || "generic").toLowerCase();
@@ -691,7 +691,6 @@ function executeWikiAudit(targetRoot, flags) {
   }
 
   return {
-    command: "wiki-audit",
     targetRoot: resolvedRoot,
     targetExists,
     template,
@@ -704,6 +703,164 @@ function executeWikiAudit(targetRoot, flags) {
     missingHandoffs,
     unknownConsumers,
     recommendations,
+  };
+}
+
+function executeWikiAudit(targetRoot, flags) {
+  return {
+    command: "wiki-audit",
+    ...inspectWikiState(targetRoot, flags),
+  };
+}
+
+function quoteArg(value) {
+  return `"${String(value).replace(/"/g, '\\"')}"`;
+}
+
+function buildCliCommand(subcommand, targetRoot, flags = {}) {
+  const parts = ["node", ".\\src\\cli.js", subcommand, quoteArg(targetRoot)];
+  for (const [key, value] of Object.entries(flags)) {
+    if (value === undefined || value === null || value === false || value === "") {
+      continue;
+    }
+    parts.push(`--${key}`);
+    parts.push(quoteArg(value));
+  }
+  return parts.join(" ");
+}
+
+function inferSkillRecommendation(task) {
+  const normalizedTask = String(task || "").toLowerCase();
+  const rules = [
+    { id: "security-review", invoke: "$security-review", patterns: ["security review", "보안 리뷰", "security audit"], reason: "요청이 보안 점검 성격입니다." },
+    { id: "code-review", invoke: "$code-review", patterns: ["code review", "review this", "리뷰", "머지 전에"], reason: "요청이 코드 리뷰/사전 점검 성격입니다." },
+    { id: "deep-interview", invoke: "$deep-interview", patterns: ["don't assume", "모르겠", "불명확", "clarify", "interview"], reason: "요구사항이 불명확하거나 가정 금지 성격입니다." },
+    { id: "ralplan", invoke: "$ralplan", patterns: ["plan", "approach", "설계", "어떻게 하지"], reason: "구현보다 계획/합의가 먼저 필요한 작업입니다." },
+    { id: "tdd", invoke: "$tdd", patterns: ["tdd", "test first", "테스트 먼저"], reason: "테스트 우선 구현 요청입니다." },
+    { id: "team", invoke: "$team", patterns: ["team", "swarm", "parallel", "병렬"], reason: "병렬/협업 실행을 원하는 작업입니다." },
+    { id: "autopilot", invoke: "$autopilot", patterns: ["autopilot", "build me", "handle it all", "전부 자동"], reason: "엔드투엔드 자동 실행을 원하는 작업입니다." },
+    { id: "ralph", invoke: "$ralph", patterns: ["keep going", "don't stop", "끝까지", "완료까지"], reason: "지속 실행과 검증을 요구하는 작업입니다." },
+  ];
+
+  for (const rule of rules) {
+    if (rule.patterns.some((pattern) => normalizedTask.includes(pattern))) {
+      return {
+        kind: "skill",
+        id: rule.id,
+        invoke: rule.invoke,
+        reason: rule.reason,
+      };
+    }
+  }
+
+  return null;
+}
+
+function taskMentionsAny(task, patterns) {
+  const normalizedTask = String(task || "").toLowerCase();
+  return patterns.some((pattern) => normalizedTask.includes(pattern));
+}
+
+function executeRecommend(targetRoot, flags) {
+  const task = String(flags.task || "").trim();
+  const state = inspectWikiState(targetRoot, flags);
+  const skillRecommendation = inferSkillRecommendation(task);
+
+  if (skillRecommendation) {
+    return {
+      command: "recommend",
+      targetRoot: state.targetRoot,
+      task,
+      state,
+      recommendation: skillRecommendation,
+      alternatives: [],
+    };
+  }
+
+  const alternatives = [];
+  const template = state.template;
+  const consumers = String(flags.consumers || "").trim();
+
+  let recommendation;
+
+  if (!state.targetExists || state.missingFiles.length > 0 || !state.readmePointerPresent) {
+    recommendation = {
+      kind: "cli",
+      id: "wiki-bootstrap",
+      invoke: buildCliCommand("wiki-bootstrap", targetRoot, { template }),
+      reason: "프로젝트 시작 단계이거나 canonical wiki scaffold가 아직 부족합니다.",
+    };
+    alternatives.push({
+      kind: "skill",
+      id: "ralplan",
+      invoke: "$ralplan",
+      reason: "구현 범위 자체가 아직 모호하면 계획부터 정리하는 편이 좋습니다.",
+    });
+  } else if (!state.buildRegistryPresent && taskMentionsAny(task, ["구현", "완료", "finished", "implemented", "만들었", "추가했"])) {
+    recommendation = {
+      kind: "cli",
+      id: "wiki-register",
+      invoke: buildCliCommand("wiki-register", targetRoot, {
+        title: "Meaningful implementation",
+        summary: "Record what changed and how it was verified.",
+        template,
+      }),
+      reason: "의미 있는 구현이 끝난 반면 Build Registry 기록이 아직 없습니다.",
+    };
+    alternatives.push({
+      kind: "cli",
+      id: "wiki-audit",
+      invoke: buildCliCommand("wiki-audit", targetRoot, { template, consumers }),
+      reason: "등록 후 누락이 없는지 확인할 때 적합합니다.",
+    });
+  } else if (state.missingHandoffs.length > 0 && consumers && taskMentionsAny(task, ["handoff", "release", "넘겨", "공유", "codex", "gemini", "antigravity"])) {
+    recommendation = {
+      kind: "cli",
+      id: "wiki-handoff",
+      invoke: buildCliCommand("wiki-handoff", targetRoot, { template, consumers }),
+      reason: "consumer handoff 페이지가 부족한 상태라 먼저 handoff를 생성해야 합니다.",
+    };
+    alternatives.push({
+      kind: "cli",
+      id: "wiki-audit",
+      invoke: buildCliCommand("wiki-audit", targetRoot, { template, consumers }),
+      reason: "handoff 생성 전후 상태를 점검할 때 적합합니다.",
+    });
+  } else if (taskMentionsAny(task, ["release", "handoff", "마무리", "릴리즈", "release-ready", "handoff-ready", "finish"])) {
+    recommendation = {
+      kind: "cli",
+      id: "wiki-finalize",
+      invoke: buildCliCommand("wiki-finalize", targetRoot, { template }),
+      reason: "마무리/핸드오프 단계이므로 release checklist와 final state 기록이 필요합니다.",
+    };
+    alternatives.push({
+      kind: "cli",
+      id: "wiki-audit",
+      invoke: buildCliCommand("wiki-audit", targetRoot, { template, consumers }),
+      reason: "최종 handoff 전에 누락 점검을 돌릴 수 있습니다.",
+    });
+  } else {
+    recommendation = {
+      kind: "cli",
+      id: "wiki-audit",
+      invoke: buildCliCommand("wiki-audit", targetRoot, { template, consumers }),
+      reason: "현재 상태를 점검하고 다음 누락/우선순위를 찾는 기본 추천입니다.",
+    };
+    alternatives.push({
+      kind: "cli",
+      id: "wiki-register",
+      invoke: buildCliCommand("wiki-register", targetRoot, { title: "Meaningful update", summary: "Record the latest project change.", template }),
+      reason: "이미 의미 있는 작업이 끝났다면 registry 업데이트가 먼저일 수 있습니다.",
+    });
+  }
+
+  return {
+    command: "recommend",
+    targetRoot: state.targetRoot,
+    task,
+    state,
+    recommendation,
+    alternatives,
   };
 }
 
@@ -1460,6 +1617,24 @@ function formatHumanReport(report) {
     ].join("\n");
   }
 
+  if (report.command === "recommend") {
+    const lines = [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Task: ${report.task || "(none provided)"}`,
+      `Top recommendation: ${report.recommendation.kind}:${report.recommendation.id}`,
+      `Why: ${report.recommendation.reason}`,
+      `Invoke: ${report.recommendation.invoke}`,
+    ];
+    if (report.alternatives?.length) {
+      lines.push("Alternatives:");
+      for (const alt of report.alternatives) {
+        lines.push(`- ${alt.kind}:${alt.id} — ${alt.reason}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -1509,6 +1684,9 @@ async function executeMigration(command, sourceInput, flags) {
   }
   if (command === "wiki-handoff") {
     return executeWikiHandoff(sourceInput, flags);
+  }
+  if (command === "recommend") {
+    return executeRecommend(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -1658,6 +1836,7 @@ Usage:
   safe-git-migrator wiki-audit <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini]
   safe-git-migrator wiki-finalize <target-root> [--template cli|adapter|generic] [--summary text] [--verification "cmd1; cmd2"] [--risks "r1; r2"] [--manual-steps "s1; s2"]
   safe-git-migrator wiki-handoff <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini] [--repo-url <url>] [--branch <branch>]
+  safe-git-migrator recommend <target-root> --task "<what you want>" [--template cli|adapter|generic] [--consumers codex,antigravity,gemini]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -1676,7 +1855,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit", "wiki-finalize", "wiki-handoff"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit", "wiki-finalize", "wiki-handoff", "recommend"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 
