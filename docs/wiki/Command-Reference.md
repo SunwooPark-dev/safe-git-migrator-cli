@@ -52,3 +52,17 @@ node .\src\cli.js wiki-register C:\path\to\repo `
   --files "src/index.ts,docs/wiki/Home.md" `
   --verification "npm test; npm run build"
 ```
+
+## wiki-audit
+Purpose:
+- inspect whether a project wiki is complete enough to prevent knowledge leakage
+- flag missing canonical wiki pages
+- check README wiki pointer presence
+- check whether `Build-Registry.md` exists
+- optionally check missing consumer handoff pages
+
+Example:
+```powershell
+node .\src\cli.js wiki-audit C:\path\to\repo --template cli
+node .\src\cli.js wiki-audit C:\path\to\repo --template adapter --consumers codex,antigravity,gemini
+```

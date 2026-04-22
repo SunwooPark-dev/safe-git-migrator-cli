@@ -251,3 +251,46 @@ test("wiki-register creates a minimal wiki registry if none exists", async () =>
   const home = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Home.md"), "utf8");
   assert.match(home, /Build Registry/);
 });
+
+test("wiki-audit passes for a bootstrapped and registered cli project", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-audit-cli-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example CLI\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "cli",
+  });
+  await executeMigration("wiki-register", tempDir, {
+    title: "Initial setup",
+    summary: "Bootstrapped the CLI wiki and verified setup.",
+  });
+
+  const report = await executeMigration("wiki-audit", tempDir, {
+    template: "cli",
+  });
+
+  assert.equal(report.command, "wiki-audit");
+  assert.equal(report.status, "pass");
+  assert.equal(report.readmePointerPresent, true);
+  assert.equal(report.buildRegistryPresent, true);
+  assert.deepEqual(report.missingFiles, []);
+});
+
+test("wiki-audit fails when required consumer handoffs are missing", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-audit-adapter-"));
+  writeFile(path.join(tempDir, "README.md"), "# Example Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("wiki-audit", tempDir, {
+    template: "adapter",
+    consumers: "codex,antigravity,gemini",
+  });
+
+  assert.equal(report.command, "wiki-audit");
+  assert.equal(report.status, "fail");
+  assert.ok(report.missingHandoffs.some((file) => file.endsWith("HANDOFF_TO_CODEX_APP.md")));
+  assert.ok(report.missingHandoffs.some((file) => file.endsWith("HANDOFF_TO_ANTIGRAVITY_APP.md")));
+  assert.ok(report.missingHandoffs.some((file) => file.endsWith("HANDOFF_TO_GEMINI_TERMINAL.md")));
+});
