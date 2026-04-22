@@ -40,6 +40,7 @@ safe-git-migrator wiki-audit <target-root> --template cli --consumers codex,anti
 - `wiki-bootstrap` creates canonical `docs/wiki/` scaffolds so new projects can satisfy the wiki lifecycle policy early
 - `wiki-register` appends implementation/verification notes into `docs/wiki/Build-Registry.md` so future work is not lost to chat history
 - `wiki-audit` checks for missing wiki pages, README links, build registry presence, and consumer handoff gaps
+- `wiki-audit` is read-only and fails cleanly on missing target roots or unknown consumer names
 
 ## Useful flags
 

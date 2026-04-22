@@ -348,42 +348,59 @@ function getExpectedHandoffFiles(consumers) {
     gemini: "HANDOFF_TO_GEMINI_TERMINAL.md",
   };
 
-  return [...new Set(consumers)]
+  const normalized = [...new Set(consumers)];
+  const unknownConsumers = normalized.filter((consumer) => !mapping[consumer]);
+  const handoffFiles = normalized
     .map((consumer) => mapping[consumer])
     .filter(Boolean);
+
+  return {
+    handoffFiles,
+    unknownConsumers,
+  };
 }
 
 function executeWikiAudit(targetRoot, flags) {
   const resolvedRoot = path.resolve(targetRoot);
-  ensureDir(resolvedRoot);
+  const targetExists = fs.existsSync(resolvedRoot);
   const template = String(flags.template || "generic").toLowerCase();
   const pages = getWikiTemplatePages(template);
   const wikiDir = path.join(resolvedRoot, "docs", "wiki");
   const requiredFiles = Object.keys(pages).map((pageName) => path.join("docs", "wiki", pageName));
-  const missingFiles = requiredFiles.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)));
+  const missingFiles = targetExists
+    ? requiredFiles.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)))
+    : requiredFiles;
 
   const readmePath = path.join(resolvedRoot, "README.md");
   const readmePointerPresent =
-    fs.existsSync(readmePath) && fs.readFileSync(readmePath, "utf8").includes("docs/wiki/Home.md");
+    targetExists &&
+    fs.existsSync(readmePath) &&
+    fs.readFileSync(readmePath, "utf8").includes("docs/wiki/Home.md");
 
   const buildRegistryPath = path.join(wikiDir, "Build-Registry.md");
-  const buildRegistryPresent = fs.existsSync(buildRegistryPath);
+  const buildRegistryPresent = targetExists && fs.existsSync(buildRegistryPath);
 
   const consumers = String(flags.consumers || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
-  const requiredHandoffs = getExpectedHandoffFiles(consumers).map((pageName) => path.join("docs", "wiki", pageName));
-  const missingHandoffs = requiredHandoffs.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)));
+  const { handoffFiles, unknownConsumers } = getExpectedHandoffFiles(consumers);
+  const requiredHandoffs = handoffFiles.map((pageName) => path.join("docs", "wiki", pageName));
+  const missingHandoffs = targetExists
+    ? requiredHandoffs.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)))
+    : requiredHandoffs;
 
   let status = "pass";
-  if (missingFiles.length > 0 || !readmePointerPresent || missingHandoffs.length > 0) {
+  if (!targetExists || unknownConsumers.length > 0 || missingFiles.length > 0 || !readmePointerPresent || missingHandoffs.length > 0) {
     status = "fail";
   } else if (!buildRegistryPresent) {
     status = "warn";
   }
 
   const recommendations = [];
+  if (!targetExists) {
+    recommendations.push("Create or point to an existing target root before running wiki-audit. The audit command is read-only and will not create missing directories.");
+  }
   if (missingFiles.length > 0) {
     recommendations.push("Run wiki-bootstrap with the correct template to create the missing canonical wiki pages.");
   }
@@ -396,10 +413,14 @@ function executeWikiAudit(targetRoot, flags) {
   if (missingHandoffs.length > 0) {
     recommendations.push("Add the required consumer handoff pages under docs/wiki/ before handoff.");
   }
+  if (unknownConsumers.length > 0) {
+    recommendations.push(`Fix unknown consumer values: ${unknownConsumers.join(", ")}.`);
+  }
 
   return {
     command: "wiki-audit",
     targetRoot: resolvedRoot,
+    targetExists,
     template,
     status,
     requiredFiles,
@@ -408,6 +429,7 @@ function executeWikiAudit(targetRoot, flags) {
     buildRegistryPresent,
     requiredHandoffs,
     missingHandoffs,
+    unknownConsumers,
     recommendations,
   };
 }
