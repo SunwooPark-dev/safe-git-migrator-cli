@@ -341,6 +341,77 @@ function executeWikiRegister(targetRoot, flags) {
   };
 }
 
+function getExpectedHandoffFiles(consumers) {
+  const mapping = {
+    codex: "HANDOFF_TO_CODEX_APP.md",
+    antigravity: "HANDOFF_TO_ANTIGRAVITY_APP.md",
+    gemini: "HANDOFF_TO_GEMINI_TERMINAL.md",
+  };
+
+  return [...new Set(consumers)]
+    .map((consumer) => mapping[consumer])
+    .filter(Boolean);
+}
+
+function executeWikiAudit(targetRoot, flags) {
+  const resolvedRoot = path.resolve(targetRoot);
+  ensureDir(resolvedRoot);
+  const template = String(flags.template || "generic").toLowerCase();
+  const pages = getWikiTemplatePages(template);
+  const wikiDir = path.join(resolvedRoot, "docs", "wiki");
+  const requiredFiles = Object.keys(pages).map((pageName) => path.join("docs", "wiki", pageName));
+  const missingFiles = requiredFiles.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)));
+
+  const readmePath = path.join(resolvedRoot, "README.md");
+  const readmePointerPresent =
+    fs.existsSync(readmePath) && fs.readFileSync(readmePath, "utf8").includes("docs/wiki/Home.md");
+
+  const buildRegistryPath = path.join(wikiDir, "Build-Registry.md");
+  const buildRegistryPresent = fs.existsSync(buildRegistryPath);
+
+  const consumers = String(flags.consumers || "")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  const requiredHandoffs = getExpectedHandoffFiles(consumers).map((pageName) => path.join("docs", "wiki", pageName));
+  const missingHandoffs = requiredHandoffs.filter((relativePath) => !fs.existsSync(path.join(resolvedRoot, relativePath)));
+
+  let status = "pass";
+  if (missingFiles.length > 0 || !readmePointerPresent || missingHandoffs.length > 0) {
+    status = "fail";
+  } else if (!buildRegistryPresent) {
+    status = "warn";
+  }
+
+  const recommendations = [];
+  if (missingFiles.length > 0) {
+    recommendations.push("Run wiki-bootstrap with the correct template to create the missing canonical wiki pages.");
+  }
+  if (!readmePointerPresent) {
+    recommendations.push("Add the README wiki pointer so users can discover docs/wiki/Home.md.");
+  }
+  if (!buildRegistryPresent) {
+    recommendations.push("Run wiki-register after a meaningful implementation slice to create Build-Registry.md.");
+  }
+  if (missingHandoffs.length > 0) {
+    recommendations.push("Add the required consumer handoff pages under docs/wiki/ before handoff.");
+  }
+
+  return {
+    command: "wiki-audit",
+    targetRoot: resolvedRoot,
+    template,
+    status,
+    requiredFiles,
+    missingFiles,
+    readmePointerPresent,
+    buildRegistryPresent,
+    requiredHandoffs,
+    missingHandoffs,
+    recommendations,
+  };
+}
+
 function normalizeSource(input) {
   if (!input) {
     throw new Error("A source path or URL is required.");
@@ -920,6 +991,19 @@ function formatHumanReport(report) {
     ].join("\n");
   }
 
+  if (report.command === "wiki-audit") {
+    return [
+      `Command: ${report.command}`,
+      `Target root: ${report.targetRoot}`,
+      `Template: ${report.template}`,
+      `Status: ${report.status}`,
+      `Missing files: ${report.missingFiles.length}`,
+      `README pointer present: ${report.readmePointerPresent ? "yes" : "no"}`,
+      `Build registry present: ${report.buildRegistryPresent ? "yes" : "no"}`,
+      `Missing handoffs: ${report.missingHandoffs.length}`,
+    ].join("\n");
+  }
+
   const lines = [];
   lines.push(`Run ID: ${report.runId}`);
   lines.push(`Source: ${report.source.input}`);
@@ -960,6 +1044,9 @@ async function executeMigration(command, sourceInput, flags) {
   }
   if (command === "wiki-register") {
     return executeWikiRegister(sourceInput, flags);
+  }
+  if (command === "wiki-audit") {
+    return executeWikiAudit(sourceInput, flags);
   }
 
   const workspace = path.resolve(flags.workspace || defaultWorkspace());
@@ -1106,6 +1193,7 @@ Usage:
   safe-git-migrator rollback <run-id> [--workspace <path>]
   safe-git-migrator wiki-bootstrap <target-root> [--template cli|adapter|generic]
   safe-git-migrator wiki-register <target-root> --title <title> --summary <summary> [--files a,b] [--verification "cmd1; cmd2"]
+  safe-git-migrator wiki-audit <target-root> [--template cli|adapter|generic] [--consumers codex,antigravity,gemini]
 
 Optional install-root overrides:
   --install-root-codex <path>
@@ -1124,7 +1212,7 @@ async function runCli(argv) {
     return;
   }
 
-  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register"].includes(command)) {
+  if (!["inspect", "dry-run", "apply", "verify", "rollback", "wiki-bootstrap", "wiki-register", "wiki-audit"].includes(command)) {
     throw new Error(`Unsupported command: ${command}`);
   }
 

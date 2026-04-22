@@ -28,6 +28,7 @@ safe-git-migrator verify <run-id>
 safe-git-migrator rollback <run-id>
 safe-git-migrator wiki-bootstrap <target-root> --template cli
 safe-git-migrator wiki-register <target-root> --title "..." --summary "..."
+safe-git-migrator wiki-audit <target-root> --template cli --consumers codex,antigravity
 ```
 
 ## Notes
@@ -38,6 +39,7 @@ safe-git-migrator wiki-register <target-root> --title "..." --summary "..."
 - official platform conventions are used first when known; otherwise the CLI falls back to conservative local import locations and reports that fact
 - `wiki-bootstrap` creates canonical `docs/wiki/` scaffolds so new projects can satisfy the wiki lifecycle policy early
 - `wiki-register` appends implementation/verification notes into `docs/wiki/Build-Registry.md` so future work is not lost to chat history
+- `wiki-audit` checks for missing wiki pages, README links, build registry presence, and consumer handoff gaps
 
 ## Useful flags
 

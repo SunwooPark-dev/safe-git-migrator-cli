@@ -22,6 +22,7 @@ node .\src\cli.js verify <run-id>
 node .\src\cli.js rollback <run-id>
 node .\src\cli.js wiki-bootstrap <target-root> --template cli
 node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
+node .\src\cli.js wiki-audit <target-root> --template cli
 ```
 
 ## Notes
@@ -30,3 +31,4 @@ node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 - `apply` installs into target roots and records backup manifests.
 - `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
 - `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.
+- `wiki-audit` checks for wiki gaps before handoff or release.
