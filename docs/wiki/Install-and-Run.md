@@ -24,6 +24,7 @@ node .\src\cli.js wiki-bootstrap <target-root> --template cli
 node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 node .\src\cli.js wiki-audit <target-root> --template cli
 node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
+node .\src\cli.js wiki-handoff <target-root> --template adapter --consumers codex,antigravity,gemini
 ```
 
 ## Notes
@@ -35,3 +36,4 @@ node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
 - `wiki-audit` checks for wiki gaps before handoff or release.
 - `wiki-audit` is read-only and should be safe to run before release or cross-tool onboarding.
 - `wiki-finalize` is the finish-phase companion command for writing release/handoff-ready wiki state.
+- `wiki-handoff` is the consumer-facing companion command for refreshing Codex / AG / Gemini handoff pages.
