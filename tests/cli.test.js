@@ -252,6 +252,24 @@ test("wiki-register creates a minimal wiki registry if none exists", async () =>
   assert.match(home, /Build Registry/);
 });
 
+test("wiki-register does not inject generic architecture pages into an existing adapter wiki", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-register-adapter-existing-"));
+  writeFile(path.join(tempDir, "README.md"), "# Adapter Repo\n");
+
+  await executeMigration("wiki-bootstrap", tempDir, {
+    template: "adapter",
+  });
+
+  const report = await executeMigration("wiki-register", tempDir, {
+    title: "Adapter update",
+    summary: "Registered an adapter-side change.",
+    template: "adapter",
+  });
+
+  assert.equal(report.command, "wiki-register");
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "Architecture.md")), false);
+});
+
 test("wiki-audit passes for a bootstrapped and registered cli project", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-audit-cli-"));
   writeFile(path.join(tempDir, "README.md"), "# Example CLI\n");
