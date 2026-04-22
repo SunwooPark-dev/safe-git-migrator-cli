@@ -23,6 +23,7 @@ node .\src\cli.js rollback <run-id>
 node .\src\cli.js wiki-bootstrap <target-root> --template cli
 node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 node .\src\cli.js wiki-audit <target-root> --template cli
+node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
 ```
 
 ## Notes
@@ -33,3 +34,4 @@ node .\src\cli.js wiki-audit <target-root> --template cli
 - `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.
 - `wiki-audit` checks for wiki gaps before handoff or release.
 - `wiki-audit` is read-only and should be safe to run before release or cross-tool onboarding.
+- `wiki-finalize` is the finish-phase companion command for writing release/handoff-ready wiki state.

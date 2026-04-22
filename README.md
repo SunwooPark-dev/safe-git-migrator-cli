@@ -29,6 +29,7 @@ safe-git-migrator rollback <run-id>
 safe-git-migrator wiki-bootstrap <target-root> --template cli
 safe-git-migrator wiki-register <target-root> --title "..." --summary "..."
 safe-git-migrator wiki-audit <target-root> --template cli --consumers codex,antigravity
+safe-git-migrator wiki-finalize <target-root> --template cli --summary "..." --verification "npm test; npm run build"
 ```
 
 ## Notes
@@ -41,6 +42,7 @@ safe-git-migrator wiki-audit <target-root> --template cli --consumers codex,anti
 - `wiki-register` appends implementation/verification notes into `docs/wiki/Build-Registry.md` so future work is not lost to chat history
 - `wiki-audit` checks for missing wiki pages, README links, build registry presence, and consumer handoff gaps
 - `wiki-audit` is read-only and fails cleanly on missing target roots or unknown consumer names
+- `wiki-finalize` writes a release checklist, links it from the wiki, and appends a finalization record to the build registry
 
 ## Useful flags
 
