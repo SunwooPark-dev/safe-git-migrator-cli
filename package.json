@@ -1,0 +1,25 @@
+{
+  "name": "safe-git-migrator-cli",
+  "version": "0.1.0",
+  "description": "Windows-first CLI for safely migrating MIT-licensed agent repositories into OMX, Codex App, Hermes, and Antigravity-compatible layouts.",
+  "bin": {
+    "safe-git-migrator": "src/cli.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node -e \"require('./src/index.js'); console.log('build ok')\"",
+    "test": "node --test"
+  },
+  "keywords": [
+    "cli",
+    "migration",
+    "codex",
+    "omx",
+    "hermes",
+    "antigravity"
+  ],
+  "license": "MIT"
+}

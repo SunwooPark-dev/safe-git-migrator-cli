@@ -1,0 +1,64 @@
+﻿# safe-git-migrator-cli
+
+Windows-first npm CLI for safely ingesting MIT-licensed GitHub or Hugging Face repositories and migrating agent-oriented assets into:
+
+- OMX
+- Codex App
+- Hermes agent
+- Antigravity
+
+## Features
+
+- safe source acquisition via clone/fetch-or-local-copy
+- MIT-only license gate for v1
+- artifact inventory and classification
+- target-platform output generation
+- transactional install with backup manifest
+- verify and rollback commands
+- machine-readable reports for every run
+- cached git acquisition with per-run source snapshots
+
+## Commands
+
+```bash
+safe-git-migrator inspect <source>
+safe-git-migrator dry-run <source> --targets omx,codex,hermes,antigravity
+safe-git-migrator apply <source> --targets omx,codex,hermes,antigravity
+safe-git-migrator verify <run-id>
+safe-git-migrator rollback <run-id>
+```
+
+## Notes
+
+- v1 is **Windows only**
+- v1 accepts **MIT-licensed sources only**
+- billed or paid API actions are intentionally unsupported
+- official platform conventions are used first when known; otherwise the CLI falls back to conservative local import locations and reports that fact
+
+## Useful flags
+
+```bash
+--workspace C:\path\to\workspace
+--targets omx,codex
+--no-install
+--report-json
+--install-root-codex C:\temp\codex
+--install-root-omx C:\temp\omx
+--install-root-hermes C:\temp\hermes
+--install-root-antigravity C:\temp\antigravity
+```
+
+## Run artifacts
+
+Each run writes machine-readable artifacts inside the selected workspace, including:
+
+- `source-manifest.json`
+- `<command>-report.json`
+- `install-manifest.json` for apply runs
+- `verify-report.json`
+- `rollback-report.json`
+
+
+## Wiki
+See docs/wiki/Home.md for the canonical project wiki.
+
