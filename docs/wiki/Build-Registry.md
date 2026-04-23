@@ -34,3 +34,19 @@
   - npm test
   - npm run build
   - node .\\src\\cli.js wiki-audit . --template cli --report-json
+
+## Implement wiki-mint Phase 2 generators
+- Recorded at: 2026-04-23T04:03:52.853Z
+- Summary: Added x-thread and substack HTML generators plus inclusive date-range filtering for wiki-mint while preserving readme-showcase safety behavior.
+- Files:
+  - src/lib/runner.js
+  - tests/cli.test.js
+  - README.md
+  - docs/wiki/Command-Reference.md
+  - docs/wiki/Install-and-Run.md
+  - docs/wiki/Roadmap.md
+- Verification:
+  - npm test
+  - npm run build
+  - node .\\src\\cli.js wiki-audit . --template cli --report-json
+  - wiki-mint x-thread/substack smoke on temp docs copy

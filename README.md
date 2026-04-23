@@ -28,7 +28,7 @@ safe-git-migrator verify <run-id>
 safe-git-migrator rollback <run-id>
 safe-git-migrator wiki-bootstrap <target-root> --template cli
 safe-git-migrator wiki-register <target-root> --title "..." --summary "..."
-safe-git-migrator wiki-mint <target-root> [--format readme-showcase|x-thread|substack] [--dry-run] [--scan-only] [--output-dir <path>] [--report-json]
+safe-git-migrator wiki-mint <target-root> [--format readme-showcase|x-thread|substack] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--dry-run] [--scan-only] [--output-dir <path>] [--report-json]
 safe-git-migrator wiki-audit <target-root> --template cli --consumers codex,antigravity
 safe-git-migrator wiki-finalize <target-root> --template cli --summary "..." --verification "npm test; npm run build"
 safe-git-migrator wiki-handoff <target-root> --template adapter --consumers codex,antigravity,gemini
@@ -43,8 +43,8 @@ safe-git-migrator recommend <target-root> --task "이제 뭘 해야 하지?" --t
 - official platform conventions are used first when known; otherwise the CLI falls back to conservative local import locations and reports that fact
 - `wiki-bootstrap` creates canonical `docs/wiki/` scaffolds so new projects can satisfy the wiki lifecycle policy early
 - `wiki-register` appends implementation/verification notes into `docs/wiki/Build-Registry.md` so future work is not lost to chat history
-- `wiki-mint` scans a target root, blocks sensitive content, writes `docs/wiki/BUILD_SHOWCASE.md` by default, and auto-registers the generated showcase through `wiki-register`
-- `readme-showcase` generates output today; `x-thread` and `substack` are accepted for dry-run, scan-only, and report paths until dedicated generators are added
+- `wiki-mint` scans a target root, blocks sensitive content, writes publishable outputs, and auto-registers generated artifacts through `wiki-register`
+- `wiki-mint` supports `readme-showcase`, `x-thread`, and `substack`; `--from` / `--to` can filter entries by recorded date
 - `wiki-audit` checks for missing wiki pages, README links, build registry presence, and consumer handoff gaps
 - `wiki-audit` is read-only and fails cleanly on missing target roots or unknown consumer names
 - `wiki-finalize` writes a release checklist, links it from the wiki, and appends a finalization record to the build registry
