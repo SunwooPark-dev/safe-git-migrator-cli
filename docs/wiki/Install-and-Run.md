@@ -22,6 +22,7 @@ node .\src\cli.js verify <run-id>
 node .\src\cli.js rollback <run-id>
 node .\src\cli.js wiki-bootstrap <target-root> --template cli
 node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
+node .\src\cli.js wiki-mint <target-root> --format readme-showcase --report-json
 node .\src\cli.js wiki-audit <target-root> --template cli
 node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
 node .\src\cli.js wiki-handoff <target-root> --template adapter --consumers codex,antigravity,gemini
@@ -34,6 +35,10 @@ node .\src\cli.js recommend <target-root> --task \"이제 뭘 해야 하지?\" -
 - `apply` installs into target roots and records backup manifests.
 - `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
 - `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.
+- `wiki-mint` writes `docs/wiki/BUILD_SHOWCASE.md` by default, blocks sensitive content, and auto-registers the generated showcase when it produces output.
+- `readme-showcase` generates output today; `x-thread` and `substack` are accepted for dry-run, scan-only, and report paths until dedicated generators are added.
+- `--dry-run` keeps `wiki-mint` read-only and only reports what would be minted.
+- `--scan-only` stops after scanning and sensitive-content checks without creating the showcase file.
 - `wiki-audit` checks for wiki gaps before handoff or release.
 - `wiki-audit` is read-only and should be safe to run before release or cross-tool onboarding.
 - `wiki-finalize` is the finish-phase companion command for writing release/handoff-ready wiki state.

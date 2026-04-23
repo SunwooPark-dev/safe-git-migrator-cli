@@ -53,6 +53,27 @@ node .\src\cli.js wiki-register C:\path\to\repo `
   --verification "npm test; npm run build"
 ```
 
+## wiki-mint
+Purpose:
+- scan a target root for showcase-ready content
+- write `docs/wiki/BUILD_SHOWCASE.md` by default
+- block sensitive content before writing or registering
+- auto-run `wiki-register` for the generated showcase when output is written
+
+Behavior:
+- `--format readme-showcase` generates output today
+- `--format x-thread` and `--format substack` are accepted for `--dry-run`, `--scan-only`, and report paths until dedicated generators are added
+- `--dry-run` scans and reports without writing files
+- `--scan-only` stops after scanning and sensitive-content checks
+- `--output-dir <path>` writes the showcase under a different directory
+- `--report-json` prints machine-readable output
+
+Example:
+```powershell
+node .\src\cli.js wiki-mint C:\path\to\repo --format readme-showcase
+node .\src\cli.js wiki-mint C:\path\to\repo --scan-only --report-json
+```
+
 ## wiki-audit
 Purpose:
 - inspect whether a project wiki is complete enough to prevent knowledge leakage
