@@ -594,6 +594,7 @@ test("wiki-mint dry-run reports parsed entry counts without writing files", asyn
   assert.equal(report.mode, "dry-run");
   assert.equal(report.status, "ok");
   assert.equal(report.entryCount, 2);
+  assert.equal(report.renderedEntryCount, 2);
   assert.equal(report.scan.blocked, false);
   assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
 
@@ -613,6 +614,7 @@ test("wiki-mint scan-only scans without generating output", async () => {
   assert.equal(report.mode, "scan-only");
   assert.equal(report.status, "ok");
   assert.equal(report.entryCount, 2);
+  assert.equal(report.renderedEntryCount, 2);
   assert.equal(report.outputPath, path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md"));
   assert.equal(report.created, false);
   assert.equal(fs.existsSync(report.outputPath), false);
@@ -632,9 +634,10 @@ test("wiki-mint dry-run accepts x-thread format without attempting generation", 
   assert.equal(report.mode, "dry-run");
   assert.equal(report.status, "ok");
   assert.equal(report.entryCount, 2);
+  assert.equal(report.renderedEntryCount, 2);
   assert.equal(report.scan.blocked, false);
   assert.equal(report.created, false);
-  assert.equal(report.outputPath, null);
+  assert.equal(report.outputPath, path.join(tempDir, "docs", "wiki", "BUILD_THREAD.md"));
 });
 
 test("wiki-mint scan-only accepts substack format without attempting generation", async () => {
@@ -651,9 +654,10 @@ test("wiki-mint scan-only accepts substack format without attempting generation"
   assert.equal(report.mode, "scan-only");
   assert.equal(report.status, "ok");
   assert.equal(report.entryCount, 2);
+  assert.equal(report.renderedEntryCount, 2);
   assert.equal(report.scan.blocked, false);
   assert.equal(report.created, false);
-  assert.equal(report.outputPath, null);
+  assert.equal(report.outputPath, path.join(tempDir, "docs", "wiki", "BUILD_SUBSTACK.html"));
 });
 
 test("wiki-mint readme-showcase writes the showcase and auto-registers the mint", async () => {
@@ -683,18 +687,208 @@ test("wiki-mint readme-showcase writes the showcase and auto-registers the mint"
   assert.match(registry, /docs\/wiki\/BUILD_SHOWCASE\.md|docs\\wiki\\BUILD_SHOWCASE\.md/);
 });
 
-test("wiki-mint only rejects unsupported formats in generate mode", async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-generate-x-thread-"));
+test("wiki-mint x-thread format writes a thread output and auto-registers the mint", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-x-thread-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "x-thread",
+  });
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.created, true);
+  assert.equal(report.outputFileName, "BUILD_THREAD.md");
+  assert.ok(fs.existsSync(report.outputPath));
+
+  const thread = fs.readFileSync(report.outputPath, "utf8");
+  assert.match(thread, /build thread/);
+  assert.match(thread, /1\/2 Added wiki scaffolding/);
+  assert.match(thread, /2\/2 Registered release checklist/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Knowledge Mint: x-thread generated/);
+  assert.match(registry, /wiki-mint --format x-thread/);
+});
+
+test("wiki-mint x-thread reports 280 character warnings without blocking generation", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-x-thread-warning-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+## Very long entry
+- Recorded at: 2026-04-22T10:00:00.000Z
+- Summary: ${"Long summary. ".repeat(40)}
+- Files:
+  - docs/wiki/Home.md
+- Verification:
+  - npm test
+`
+  );
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "x-thread",
+  });
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.created, true);
+  assert.ok(report.warnings.some((warning) => warning.includes("280")));
+});
+
+test("wiki-mint substack format writes escaped paste-ready HTML", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-substack-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+## Entry <One> & "Two"
+- Recorded at: 2026-04-22T10:00:00.000Z
+- Summary: Built <script>alert("x")</script> safely.
+- Files:
+  - docs/wiki/Home.md
+- Verification:
+  - npm test
+`
+  );
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "substack",
+  });
+
+  assert.equal(report.status, "ok");
+  assert.equal(report.created, true);
+  assert.equal(report.outputFileName, "BUILD_SUBSTACK.html");
+
+  const html = fs.readFileSync(report.outputPath, "utf8");
+  assert.match(html, /<!doctype html>/);
+  assert.match(html, /Entry &lt;One&gt; &amp; &quot;Two&quot;/);
+  assert.match(html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
+
+  const registry = fs.readFileSync(path.join(tempDir, "docs", "wiki", "Build-Registry.md"), "utf8");
+  assert.match(registry, /Knowledge Mint: substack generated/);
+});
+
+test("wiki-mint date-range filters rendered entries inclusively", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-date-range-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    from: "2026-04-21",
+    to: "2026-04-21",
+  });
+
+  assert.equal(report.entryCount, 2);
+  assert.equal(report.renderedEntryCount, 1);
+
+  const showcase = fs.readFileSync(report.outputPath, "utf8");
+  assert.doesNotMatch(showcase, /Added wiki scaffolding/);
+  assert.match(showcase, /Registered release checklist/);
+  assert.match(showcase, /- Entries: 1/);
+});
+
+test("wiki-mint date filters support from-only and to-only bounds", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-date-open-bounds-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const fromOnly = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    from: "2026-04-21",
+    "dry-run": true,
+  });
+
+  assert.equal(fromOnly.renderedEntryCount, 1);
+
+  const toOnly = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    to: "2026-04-20",
+    "dry-run": true,
+  });
+
+  assert.equal(toOnly.renderedEntryCount, 1);
+});
+
+test("wiki-mint date filters skip missing or invalid recordedAt values only when active", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-date-invalid-recorded-at-"));
+  writeBuildRegistry(
+    tempDir,
+    `# Build Registry
+
+## Missing date entry
+- Summary: No recorded date here.
+- Files:
+  - docs/wiki/Home.md
+- Verification:
+  - manual review
+
+## Invalid date entry
+- Recorded at: not-a-date
+- Summary: Bad recorded date.
+- Files:
+  - docs/wiki/Bad.md
+- Verification:
+  - manual review
+
+## Valid date entry
+- Recorded at: 2026-04-22T10:00:00.000Z
+- Summary: Good recorded date.
+- Files:
+  - docs/wiki/Good.md
+- Verification:
+  - npm test
+`
+  );
+
+  const noFilter = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    "dry-run": true,
+  });
+  assert.equal(noFilter.renderedEntryCount, 3);
+
+  const withFilter = await executeMigration("wiki-mint", tempDir, {
+    format: "readme-showcase",
+    from: "2026-04-22",
+    to: "2026-04-22",
+    "dry-run": true,
+  });
+  assert.equal(withFilter.renderedEntryCount, 1);
+});
+
+test("wiki-mint warns and skips generation when date filters match no renderable entries", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-date-empty-selection-"));
+  writeBuildRegistry(tempDir, cleanWikiRegistry());
+
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "x-thread",
+    from: "2026-05-01",
+  });
+
+  assert.equal(report.status, "warn");
+  assert.equal(report.created, false);
+  assert.equal(report.registryAppended, false);
+  assert.equal(report.renderedEntryCount, 0);
+  assert.ok(report.warnings.some((warning) => warning.includes("No renderable")));
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_THREAD.md")), false);
+});
+
+test("wiki-mint rejects invalid date filters before writing", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-invalid-date-"));
   writeBuildRegistry(tempDir, cleanWikiRegistry());
 
   await assert.rejects(
     executeMigration("wiki-mint", tempDir, {
-      format: "x-thread",
+      from: "2026-99-99",
     }),
-    /Unsupported wiki-mint format: x-thread/
+    /Invalid --from date/
   );
 
-  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
+  await assert.rejects(
+    executeMigration("wiki-mint", tempDir, {
+      from: "2026-04-22",
+      to: "2026-04-21",
+    }),
+    /Invalid date range/
+  );
 });
 
 test("wiki-mint reruns do not include prior mint-generated registry entries in showcase output or statistics", async () => {
@@ -835,7 +1029,7 @@ test("wiki-mint warns on zero parsed entries and skips file creation", async () 
   assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_SHOWCASE.md")), false);
 });
 
-test("wiki-mint rejects unsupported generate formats even when the registry has zero entries", async () => {
+test("wiki-mint accepts supported non-readme formats even when the registry has zero entries", async () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sgm-mint-empty-unsupported-format-"));
   writeBuildRegistry(
     tempDir,
@@ -845,12 +1039,13 @@ test("wiki-mint rejects unsupported generate formats even when the registry has 
 `
   );
 
-  await assert.rejects(
-    executeMigration("wiki-mint", tempDir, {
-      format: "x-thread",
-    }),
-    /Unsupported wiki-mint format: x-thread/
-  );
+  const report = await executeMigration("wiki-mint", tempDir, {
+    format: "x-thread",
+  });
+
+  assert.equal(report.status, "warn");
+  assert.equal(report.created, false);
+  assert.equal(fs.existsSync(path.join(tempDir, "docs", "wiki", "BUILD_THREAD.md")), false);
 });
 
 test("wiki-mint blocks sensitive content, reports offending entry, and sets CLI exit code on report-json", async () => {

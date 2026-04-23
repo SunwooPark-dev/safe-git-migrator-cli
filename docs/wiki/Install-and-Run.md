@@ -23,6 +23,8 @@ node .\src\cli.js rollback <run-id>
 node .\src\cli.js wiki-bootstrap <target-root> --template cli
 node .\src\cli.js wiki-register <target-root> --title \"...\" --summary \"...\"
 node .\src\cli.js wiki-mint <target-root> --format readme-showcase --report-json
+node .\src\cli.js wiki-mint <target-root> --format x-thread --from 2026-04-01 --to 2026-04-30
+node .\src\cli.js wiki-mint <target-root> --format substack --output-dir C:\path\to\out
 node .\src\cli.js wiki-audit <target-root> --template cli
 node .\src\cli.js wiki-finalize <target-root> --template cli --summary \"...\"
 node .\src\cli.js wiki-handoff <target-root> --template adapter --consumers codex,antigravity,gemini
@@ -35,8 +37,9 @@ node .\src\cli.js recommend <target-root> --task \"이제 뭘 해야 하지?\" -
 - `apply` installs into target roots and records backup manifests.
 - `wiki-bootstrap` scaffolds `docs/wiki/` in a target project and is useful at project start.
 - `wiki-register` records what was built and how it was verified so implementation knowledge stays in the repo.
-- `wiki-mint` writes `docs/wiki/BUILD_SHOWCASE.md` by default, blocks sensitive content, and auto-registers the generated showcase when it produces output.
-- `readme-showcase` generates output today; `x-thread` and `substack` are accepted for dry-run, scan-only, and report paths until dedicated generators are added.
+- `wiki-mint` writes format-specific publishable files, blocks sensitive content, and auto-registers generated outputs.
+- `readme-showcase` writes `BUILD_SHOWCASE.md`, `x-thread` writes `BUILD_THREAD.md`, and `substack` writes `BUILD_SUBSTACK.html`.
+- `--from` and `--to` filter registry entries by inclusive `Recorded at` dates.
 - `--dry-run` keeps `wiki-mint` read-only and only reports what would be minted.
 - `--scan-only` stops after scanning and sensitive-content checks without creating the showcase file.
 - `wiki-audit` checks for wiki gaps before handoff or release.

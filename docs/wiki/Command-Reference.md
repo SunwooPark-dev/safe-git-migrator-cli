@@ -56,21 +56,25 @@ node .\src\cli.js wiki-register C:\path\to\repo `
 ## wiki-mint
 Purpose:
 - scan a target root for showcase-ready content
-- write `docs/wiki/BUILD_SHOWCASE.md` by default
+- write a publishable output file by format
 - block sensitive content before writing or registering
 - auto-run `wiki-register` for the generated showcase when output is written
 
 Behavior:
-- `--format readme-showcase` generates output today
-- `--format x-thread` and `--format substack` are accepted for `--dry-run`, `--scan-only`, and report paths until dedicated generators are added
+- `--format readme-showcase` writes `docs/wiki/BUILD_SHOWCASE.md`
+- `--format x-thread` writes `docs/wiki/BUILD_THREAD.md` and reports 280-character warnings
+- `--format substack` writes `docs/wiki/BUILD_SUBSTACK.html`
+- `--from YYYY-MM-DD` and `--to YYYY-MM-DD` filter entries by `Recorded at` date, inclusive
 - `--dry-run` scans and reports without writing files
 - `--scan-only` stops after scanning and sensitive-content checks
-- `--output-dir <path>` writes the showcase under a different directory
+- `--output-dir <path>` writes the generated file under a different directory
 - `--report-json` prints machine-readable output
 
 Example:
 ```powershell
 node .\src\cli.js wiki-mint C:\path\to\repo --format readme-showcase
+node .\src\cli.js wiki-mint C:\path\to\repo --format x-thread --from 2026-04-01 --to 2026-04-30
+node .\src\cli.js wiki-mint C:\path\to\repo --format substack --output-dir C:\path\to\out
 node .\src\cli.js wiki-mint C:\path\to\repo --scan-only --report-json
 ```
 

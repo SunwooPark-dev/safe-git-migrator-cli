@@ -8,14 +8,16 @@
 - `wiki-handoff`
 - `recommend`
 - `wiki-mint` readme-showcase generator
+- `wiki-mint` x-thread generator
+- `wiki-mint` substack HTML generator
+- `wiki-mint` date-range filter
 - GitHub Actions quality gate on `main`
 
 ## P1 — 바로 해야 할 것
-1. `wiki-mint` Phase 2 Sprint 1
-   - x-thread generator
-   - substack HTML generator
-   - date-range filter
-   - Cockpit integration starter
+1. `wiki-mint` Cockpit integration starter
+   - AG lane에서 `sih-core` `app.js` 중복 `registerMintedAsset()` 정리
+   - `badge--mint` metadata 기반 렌더링 확인
+   - Supabase INSERT / idempotency 검증
 2. source acquisition fidelity 강화
    - 실제 GitHub/Hugging Face 입력을 더 많이 검증
 3. wiki 관련 코드 모듈 분리
